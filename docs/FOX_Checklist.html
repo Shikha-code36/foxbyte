@@ -135,7 +135,7 @@
 
   <h2>Suggested next steps</h2>
   <ol class="next">
-      <li><b>The first run is now the first thing built</b> (B3): sample data, a console that opens itself with the setup token in the link, <code>fox check</code>, <code>fox connect</code>, and plain-English errors. What is left of that review: the Blackbox page still refreshes only when asked, no entry shows its place in the hash chain, and rewind is reachable only from <code>/integrity</code> — the next batch.</li>
+      <li><b>The first run and the record are now the built parts</b> (B3, L5, H13): sample data, a console that opens itself with the setup token in the link, <code>fox check</code>, <code>fox connect</code>, plain-English errors — and a Blackbox page that keeps itself up to date, shows each entry's place in the hash chain, and offers to branch from before a change on the row where the change is. Rewind is documented now too; before this it worked and appeared in no user-facing page.</li>
       <li>Run on real machines what the throwaway VM cannot: <code>fox update</code> across a real release on macOS and Windows (A9); on Windows, the zstd distro image's unpack (M5), the btrfs holding area of <code>fox pg upgrade</code> (D6), and an export's copy to the host (D5).</li>
       <li>Automated tests for the imports (I1–I3, I7) — the last area with none.</li>
       <li>Gate release tags on the nightly suites, so a tag cannot ship past a red suite (M2).</li>
@@ -385,7 +385,8 @@
       <li class="todo">Streaming for very large ledgers</li></ul></td><td class="tb">v2 §3</td></tr>
     <tr data-id="H13" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H13</td><td><b>Branch from just before a Blackbox entry</b><ul class="subs">
       <li class="ok">Restore + replay up to the change's transaction</li><li class="ok">By transaction id or timestamp</li>
-      <li class="ok">CLI, REST, MCP, web panel</li><li class="ok">main untouched</li></ul></td><td class="tb">Unit; v2 §4</td></tr>
+      <li class="ok">CLI, REST, MCP, the Integrity panel, and every row of the Blackbox page</li><li class="ok">main untouched</li>
+      <li class="ok">Documented: README, the Guide's step 6, and the reference</li></ul></td><td class="tb">Unit; v2 §4; VM ui</td></tr>
     <tr data-id="H14" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H14</td><td><b>Blackbox names &amp; aliases</b><ul class="subs">
       <li class="ok"><code>fox blackbox</code>, <code>/blackbox</code> routes, MCP and SDK names</li><li class="ok">Every original name still works</li></ul></td><td class="tb">Unit; v2 §5</td></tr>
     <tr data-id="H15" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H15</td><td><b>Policy gate (warn / block)</b><ul class="subs">
@@ -497,7 +498,11 @@
     <tr data-id="L4" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L4</td><td><b>SQL console &amp; browser</b><ul class="subs">
       <li class="ok">Schema sidebar, rows, structure, indexes</li><li class="ok">Values shown as Postgres writes them (uuid, interval, inet, bytea)</li><li class="ok">SQL editor</li><li class="ok">System tables hidden by default, with a show button</li><li class="ok">Runs as the signed-in user; one-run override switch</li><li class="ok">Per-rule override for policy blocks</li><li class="part">One statement per run (extended protocol)</li></ul></td><td class="tb">Manual; API in v2 §6</td></tr>
     <tr data-id="L5" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">L5</td><td><b>Blackbox page</b><ul class="subs">
-      <li class="ok">Entries per branch with badges</li><li class="ok">Table / risk / date filters, and "Clear filters"</li><li class="ok">Verify button; a row expands to its statement and session</li><li class="ok">Covered by the console's Playwright tests</li></ul></td><td class="tb">v2 §5b; browser; VM ui</td></tr>
+      <li class="ok">Entries per branch with badges</li><li class="ok">Table / risk / date filters, and "Clear filters"</li><li class="ok">Verify button; a row expands to its statement and session</li>
+      <li class="ok">Live: new entries arrive on their own (3s), marked briefly, pausable; never while older pages are being read</li>
+      <li class="ok">The chain is visible: entry id, its row hash and the previous entry's, each copyable</li>
+      <li class="ok">"Branch from before this change" on the row itself (<code>main</code>; explained elsewhere)</li>
+      <li class="ok">Covered by the console's Playwright tests</li></ul></td><td class="tb">v2 §5b; browser; VM ui</td></tr>
     <tr data-id="L6" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L6</td><td><b>API keys page</b><ul class="subs">
       <li class="ok">Create, copy, list, revoke</li><li class="ok">A new key is shown inside its connection string (E3's next step)</li><li class="ok">Covered by the console's Playwright tests</li></ul></td><td class="tb">Manual; browser review 21 Sep; VM ui</td></tr>
     <tr data-id="L7" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L7</td><td><b>Landing, Guide &amp; Docs pages</b><ul class="subs">

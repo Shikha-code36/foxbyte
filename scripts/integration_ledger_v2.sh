@@ -480,6 +480,31 @@ assert_eq "with=session adds the session column" "$(lcols 'limit=1&with=session'
   "at,actor,actor_kind,tool,branch,command_tag,object_identity,statement,status,risk,session"
 assert_eq "without it the columns are unchanged" "$(lcols 'limit=1')" \
   "at,actor,actor_kind,tool,branch,command_tag,object_identity,statement,status,risk"
+# with=chain is how the console shows that an entry is linked to the one before,
+# and how it knows an entry's id at all — without which it could not offer to
+# branch from before a change.
+assert_eq "with=chain adds the id and the two hashes" "$(lcols 'limit=1&with=chain')" \
+  "at,actor,actor_kind,tool,branch,command_tag,object_identity,statement,status,risk,id,prev_hash,row_hash"
+assert_eq "…and both together, which is what the page asks for" "$(lcols 'limit=1&with=session,chain')" \
+  "at,actor,actor_kind,tool,branch,command_tag,object_identity,statement,status,risk,session,id,prev_hash,row_hash"
+assert_eq "an unknown `with` value is ignored, not passed to the database" "$(lcols 'limit=1&with=nonsense')" \
+  "at,actor,actor_kind,tool,branch,command_tag,object_identity,statement,status,risk"
+# The hashes must be real and actually chain. The chain runs in ledger id order,
+# which is not always the order the page shows: the list is sorted by time, and an
+# entry recorded from an exception handler (a BLOCKED change) can carry an earlier
+# timestamp than an entry with a lower id. So the pairs are matched by id.
+CHAIN="$(curl -sk -H "$AUTH" "$API/api/branches/main/ledger?limit=50&with=chain" | python3 -c '
+import sys, json
+d = json.load(sys.stdin); c = {n: i for i, n in enumerate(d["columns"])}
+by_id = {int(r[c["id"]]): r for r in d["rows"]}
+pairs = [(i, i - 1) for i in sorted(by_id, reverse=True) if i - 1 in by_id]
+if not pairs:
+    print("no-adjacent-pair"); raise SystemExit
+linked = all(by_id[a][c["prev_hash"]] == by_id[b][c["row_hash"]] for a, b in pairs)
+hashes = all(len(by_id[i][c["row_hash"]] or "") == 64 for i in by_id)
+print(f"{len(pairs)}-pairs", "linked" if linked else "broken", "sha256" if hashes else "short")')"
+assert_eq "every hash the page receives chains to the entry before it" \
+  "$(echo "$CHAIN" | cut -d" " -f2-)" "linked sha256"
 assert_eq "table filter" "$(lcount "table=$PT&limit=50")" "3"
 assert_eq "table + risk filter" "$(lcount "table=$PT&risk=drop-column&limit=50")" "1"
 TODAY="$(pg pg-main "SELECT to_char(now(),'YYYY-MM-DD')")"

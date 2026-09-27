@@ -178,7 +178,7 @@ paths:
         - { name: kind, in: query, schema: { type: string, enum: [human, agent] } }
         - { name: since, in: query, description: "Only entries at or after this time.", schema: { type: string } }
         - { name: until, in: query, description: "Only entries at or before this time.", schema: { type: string } }
-        - { name: with, in: query, description: "Extra columns, comma-separated: session. The default columns never change.", schema: { type: string, example: session } }
+        - { name: with, in: query, description: "Extra columns, comma-separated: session, chain (id, prev_hash, row_hash). The default columns never change.", schema: { type: string, example: "session,chain" } }
         - { name: limit, in: query, schema: { type: integer, default: 200, maximum: 2000 } }
         - { name: offset, in: query, schema: { type: integer } }
       responses:

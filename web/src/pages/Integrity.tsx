@@ -90,12 +90,24 @@ export default function Integrity() {
       </div>
 
       <div className="panel" style={{ marginTop: 18 }}>
-        <h3 style={{ marginTop: 0 }}>Branch from before a change</h3>
+        <h3 style={{ marginTop: 0 }}>Branch from before a change <span className="lg-declared">main only</span></h3>
         <p className="muted" style={{ marginTop: 0 }}>
           Creates a new branch holding <code>main</code> exactly as it was just before a Blackbox entry — select one below,
           or find its id with <code>fox blackbox entries</code>. <code>main</code> is not modified. It restores a base backup and replays WAL, so it takes a
           few minutes, and needs a base backup taken before the change.
         </p>
+        {/* This panel always acts on main, whatever the Branch selector above says:
+            main is the only branch that archives WAL, so it is the only one with a
+            point to go back to. The selector drives verify, checkpoint and export.
+            Saying so is the fix — passing the selected branch would only produce an
+            error from the engine. */}
+        {branch !== 'main' && (
+          <p className="muted" style={{ marginTop: 0 }}>
+            The <b>Branch</b> selector above is showing <code>{branch}</code>, and it applies to verifying, checkpointing
+            and exporting. This panel is about <code>main</code>: it is the only branch that archives WAL, so it is the
+            only one that can be wound back.
+          </p>
+        )}
         <div className="row" style={{ flexWrap: 'wrap', gap: 10 }}>
           <input placeholder="Entry id" inputMode="numeric" value={entryId}
             onChange={e => setEntryId(e.target.value.replace(/[^0-9]/g, ''))} style={{ width: 150 }} />
@@ -118,6 +130,10 @@ export default function Integrity() {
           <div style={{ overflowX: 'auto', marginTop: 12 }}>
             <table style={{ width: '100%', fontSize: 13 }}>
               <thead>
+                <tr><th align="left" colSpan={6} style={{ fontWeight: 500 }} className="muted">
+                  The 20 newest entries on <code>main</code> — or use them from the{' '}
+                  <a href="/blackbox">Blackbox</a> page, where every entry has this action
+                </th></tr>
                 <tr><th align="left">ID</th><th align="left">Time (UTC)</th><th align="left">Actor</th><th align="left">Change</th><th align="left">Status</th><th /></tr>
               </thead>
               <tbody>

@@ -811,6 +811,36 @@ th.expand-col, td.expand-col { width: 34px; padding-left: 8px; padding-right: 0;
 .lg-caret { color: var(--muted); font-size: 11px; }
 .lg-detail td { background: color-mix(in srgb, var(--panel) 70%, transparent); }
 .lg-meta { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12.5px; margin-bottom: 8px; }
+
+/* The hash chain, made visible. Each entry's hash covers its own fields and the
+   hash of the entry before it, and until now no hash was shown anywhere in the
+   product — "tamper-evident" was a sentence rather than something to look at. */
+.lg-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12.5px; margin-bottom: 10px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.lg-chain .lg-link { color: var(--muted); }
+.lg-hash { background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; }
+.lg-hash code { font-size: 12px; }
+.lg-hash:hover code { color: var(--accent); }
+
+/* What to do about a change that should not have happened, offered where the
+   change is: the row itself. */
+.lg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; font-size: 12.5px; }
+
+/* Live refresh: the dot is lit while the page is watching, and an entry that
+   just arrived is marked briefly so it is clear what changed. */
+.lg-live { display: inline-flex; align-items: center; gap: 7px; }
+.lg-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.lg-live.on .lg-dot { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .lg-live.on .lg-dot { animation: lg-pulse 2s ease-in-out infinite; }
+  @keyframes lg-pulse { 50% { opacity: 0.45; } }
+}
+.lg-new td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .lg-new td { animation: lg-fade 2s ease-out forwards; }
+  @keyframes lg-fade { to { background: transparent; } }
+}
 .lg-statement { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 12.5px;
   color: var(--term-text); max-height: 260px; overflow: auto; } /* the code colour pre code uses */
 

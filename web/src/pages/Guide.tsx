@@ -193,7 +193,21 @@ fox branch delete feature-x                 # throw it away; main is untouched`}
         <li><strong>Risky migrations</strong> — try on a branch first; if it breaks, delete and retry.</li>
       </ul>
 
-      <h2>6 · One database per AI agent</h2>
+      <h2>6 · Undo a change you should not have made</h2>
+      <p>The Blackbox records every schema change with the transaction that made it, and <code>main</code> archives
+        its write-ahead log — so the record is also a way back. Point at an entry and get a{' '}
+        <strong>new branch holding <code>main</code> exactly as it was just before that change</strong>.{' '}
+        <code>main</code> is left alone.</p>
+      <Code>{`fox blackbox entries                       # the newest entries with their ids
+fox blackbox branch-before 42              # a branch of main as it was just before entry 42
+fox blackbox branch-before 42 --as before-the-drop`}</Code>
+      <p>Or open the <a href="/blackbox">Blackbox</a> page, expand the change, and choose{' '}
+        <em>Branch from before this change</em> — the same action, on the row where you spotted the problem.</p>
+      <p className="muted">It restores a base backup and replays WAL, so it takes a few minutes and needs a base
+        backup taken before the change. <code>main</code> is the only branch it works from: it is the only one that
+        archives WAL. A change the guardrail refused never happened, so there is nothing to go back to.</p>
+
+      <h2>7 · One database per AI agent</h2>
       <p>Give each agent its own disposable database over HTTP (these endpoints need an API key —
         create one with <code>fox apikey create &lt;email&gt;</code>):</p>
       <Code>{`curl -H "Authorization: Bearer $FOX_KEY" -X POST   https://localhost:8088/agents/alice/branch
@@ -215,6 +229,7 @@ curl -H "Authorization: Bearer $FOX_KEY" -X DELETE https://localhost:8088/agents
           <tr><td>Connection string</td><td><code>postgres://dbadmin:&lt;API_KEY&gt;@localhost:6432/&lt;branch&gt;?sslmode=require</code></td></tr>
           <tr><td>Create / list / delete a branch</td><td><code>fox branch create|list|delete &lt;name&gt;</code></td></tr>
           <tr><td>Time-travel (PITR)</td><td><code>fox backup create</code> · <code>fox restore --to latest</code></td></tr>
+          <tr><td>Undo a schema change</td><td><code>fox blackbox branch-before &lt;id&gt;</code></td></tr>
           <tr><td>Web console &amp; dashboard</td><td><code>fox start</code> → <code>localhost:8080</code></td></tr>
         </tbody>
       </table>
