@@ -30,6 +30,9 @@ export default function Docs() {
           <tr><td><code>fox setup</code></td><td>One-time (macOS / Windows): create/start the local VM (WSL2 on Windows) and bring everything up</td></tr>
           <tr><td><code>fox start</code> · <code>fox stop</code></td><td>Start / stop the whole stack in the background</td></tr>
           <tr><td><code>fox status</code></td><td>Servers, primary readiness, and branches</td></tr>
+          <tr><td><code>fox check</code></td><td>Check this install — version, storage, <code>main</code>, servers, ports, TLS, Blackbox, backups — and say what to run for anything wrong</td></tr>
+          <tr><td><code>fox connect [branch] [--dsn]</code> · <code>fox psql [branch]</code></td><td>The connection string an application uses, then a psql shell on that branch (no API key needed from this machine)</td></tr>
+          <tr><td><code>fox demo seed|drop|sql [branch]</code></td><td>The sample tables (<code>users</code>, <code>projects</code>, <code>events</code>). A first start seeds <code>main</code>; <code>FOX_NO_DEMO=1</code> starts empty</td></tr>
           <tr><td><code>fox logs [gateway|api]</code></td><td>Print a background server's log</td></tr>
           <tr><td><code>fox branch create|list|delete|suspend|resume &lt;name&gt;</code></td><td>Manage copy-on-write branches (<code>create … --from &lt;branch&gt;</code> copies another branch)</td></tr>
           <tr><td><code>fox vm [status|shell]</code></td><td>macOS / Windows: the engine VM's state and size, or a shell inside it</td></tr>
@@ -96,6 +99,9 @@ export default function Docs() {
         <thead><tr><th>Variable</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td><code>FOX_SIGNUP</code></td><td><code>closed</code> (default) or <code>open</code> — allow browser self-signup after the first account (which always needs the setup token)</td></tr>
+          <tr><td><code>FOX_NO_DEMO</code></td><td><code>1</code> to start with an empty <code>main</code>, instead of the three sample tables</td></tr>
+          <tr><td><code>FOX_NO_BROWSER</code></td><td><code>1</code> to stop <code>fox start</code> opening this console</td></tr>
+          <tr><td><code>FOX_CONSOLE_URL</code></td><td>Where the console is, when the ports are not the defaults (default <code>https://localhost:8080</code>)</td></tr>
           <tr><td><code>FOX_LISTEN</code></td><td>Address the services listen on: <code>127.0.0.1</code> (default); <code>0.0.0.0</code> to expose them (TLS is then required)</td></tr>
           <tr><td><code>FOX_PUBLIC_URL</code></td><td>Public base URL, for OAuth callbacks and links (default <code>https://localhost:8080</code>)</td></tr>
           <tr><td><code>FOX_WEB_ORIGIN</code></td><td>Where the web console is served, for CORS and the return from an OAuth login (default: the public URL — set it only for a separately hosted UI)</td></tr>

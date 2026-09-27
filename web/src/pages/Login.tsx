@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { login, register, providers, oauthUrl, type Providers } from '../api'
 import { useAuth } from '../auth-context'
 import { Mark, Wordmark } from '../components/brand'
@@ -7,15 +7,26 @@ import { Mark, Wordmark } from '../components/brand'
 export default function Login() {
   const { user, setUser } = useAuth()
   const nav = useNavigate()
+  // `fox start` opens this page as /login?setup=<token> on a first run, so the
+  // token is already here and nobody has to copy it out of a terminal.
+  const [params] = useSearchParams()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [token, setToken] = useState('')
+  const [token, setToken] = useState(params.get('setup') ?? '')
+  // Read once: the token is taken out of the address bar below, and the wording
+  // should not change when it goes.
+  const [tokenFromLink] = useState(() => (params.get('setup') ?? '') !== '')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [prov, setProv] = useState<Providers | null>(null)
 
   useEffect(() => { if (user) nav('/dashboard') }, [user, nav])
+  // A one-time token does not belong in the address bar or in history; it is in
+  // the form now.
+  useEffect(() => {
+    if (tokenFromLink) window.history.replaceState({}, '', '/login')
+  }, [tokenFromLink])
   useEffect(() => {
     providers().then(p => {
       setProv(p)
@@ -56,7 +67,9 @@ export default function Login() {
       )}
       <p className="muted">
         {setup
-          ? 'This install has no account yet. The first one is its admin, so it needs the setup token that fox start printed (fox setup-token shows it again).'
+          ? tokenFromLink
+            ? 'This install has no account yet. The first one is its admin; its setup token came in with this link, so just choose an email and a password.'
+            : 'This install has no account yet. The first one is its admin, so it needs the setup token that fox start printed (fox setup-token shows it again).'
           : mode === 'register'
           ? 'Create a FoxByte account to get a dashboard, SQL console, and API keys.'
           : 'Access your FoxByte dashboard, SQL console, and API keys.'}

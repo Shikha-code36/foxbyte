@@ -77,6 +77,8 @@ func Maybe(args []string) (handled bool, err error) {
 		notice := StartUpdateNotice()
 		err := hostForward(args)
 		if err == nil {
+			// The engine ran in the VM, which has no browser; this machine does.
+			openConsoleAfterStart()
 			notice()
 		}
 		return true, err

@@ -135,11 +135,11 @@
 
   <h2>Suggested next steps</h2>
   <ol class="next">
-      <li><b>Watch tonight's nightly run</b> (Actions → nightly): the first found two faults in how CI built and looked things up, both fixed.</li>
+      <li><b>The first run is now the first thing built</b> (B3): sample data, a console that opens itself with the setup token in the link, <code>fox check</code>, <code>fox connect</code>, and plain-English errors. What is left of that review: the Blackbox page still refreshes only when asked, no entry shows its place in the hash chain, and rewind is reachable only from <code>/integrity</code> — the next batch.</li>
       <li>Run on real machines what the throwaway VM cannot: <code>fox update</code> across a real release on macOS and Windows (A9); on Windows, the zstd distro image's unpack (M5), the btrfs holding area of <code>fox pg upgrade</code> (D6), and an export's copy to the host (D5).</li>
       <li>Automated tests for the imports (I1–I3, I7) — the last area with none.</li>
       <li>Gate release tags on the nightly suites, so a tag cannot ship past a red suite (M2).</li>
-      <li>Decide how this checklist shows partial work (audit v2 G31): 34 features are badged done or manual while carrying an open sub-item. The sub-items are honest; the badge is what a summary flattens.</li>
+      <li>Decide how this checklist shows partial work (audit v2 G31): 9 features are badged done while carrying an open sub-item (<code>C7, D5, D6, F5, G3, H16, H17, I13, M7</code>) — down from 34. Each of those sub-items is a disclosed limit rather than unfinished work, so the remaining question is whether a limit belongs in the sub-item list at all.</li>
       <li><b>From the audit, deliberately left:</b> HA beyond the demo — automatic failover and fencing across hosts (D4, G21); metrics, alerts and restart on crash (B2, G27); branch merge (H18, G29); timeouts on the engine's own commands and splitting the branch package (G30); quotas on btrfs and per-branch CPU/memory (C6, G33); pgvector in the image (M6, G34); <code>/api/v1</code> (K1, G35).</li>
     </ol>
   <div class="foot">FOX_Checklist · overview</div>
@@ -195,7 +195,7 @@
   <table>
     <tr><th></th><th>ID</th><th>Feature · sub-features</th><th>Tested by</th></tr>
     <tr data-id="B1" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">B1</td><td><b>The <code>fox</code> command set</b><ul class="subs">
-      <li class="ok">Stack: setup, start, stop, up, down, status, logs, psql, update</li><li class="ok">Branching, backup / restore, HA</li>
+      <li class="ok">Stack: setup, start, stop, up, down, status, check, logs, connect, psql, demo, update</li><li class="ok">Branching, backup / restore, HA</li>
       <li class="ok">Blackbox, policy, impact</li><li class="ok">Import, pipelines</li>
       <li class="ok">backup export / restore, pg status / upgrade</li>
       <li class="ok">Users, API keys, admin</li><li class="ok"><code>fox vm status</code> / <code>fox vm shell</code> (Lima, WSL; Linux says there is no VM)</li>
@@ -203,6 +203,15 @@
     <tr data-id="B2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">B2</td><td><b>Background services (daemon)</b><ul class="subs">
       <li class="ok">Control plane :8080, gateway :6432, agent API :8088</li><li class="ok">Detached, pidfiles and logs in <code>~/.fox</code></li>
       <li class="ok">Stop (TERM then KILL), status, logs</li><li class="todo">Health check / restart on crash</li></ul></td><td class="tb">Unit (<code>TestStopTerminatesProcess</code>); VM §1</td></tr>
+    <tr data-id="B3" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">B3</td><td><b>First run (sample data, <code>check</code>, <code>connect</code>)</b><ul class="subs">
+      <li class="ok">Sample data seeded into <code>main</code> on a first start: <code>users</code>, <code>projects</code>, <code>events</code>, five rows each, two foreign keys</li>
+      <li class="ok"><code>fox demo seed|drop|sql</code> on any branch; <code>FOX_NO_DEMO=1</code> starts empty</li>
+      <li class="ok">The console opens itself, with the one-time setup token already in the link</li>
+      <li class="ok">Declines to open a browser in the VM, over SSH, with no display, or with <code>FOX_NO_BROWSER</code></li>
+      <li class="ok"><code>fox check</code>: version, console, storage, main, three servers, three ports, TLS, Blackbox, backup age, sample data — each failure with the command that fixes it</li>
+      <li class="ok"><code>fox connect [branch]</code> prints the application's connection string, then opens psql; <code>fox psql</code> takes a branch</li>
+      <li class="ok"><code>fox branch create</code> ends with the connection string and how long it took</li>
+      <li class="ok">Plain-English errors in the CLI and the console (<code>internal/errhint</code>, <code>web/src/errhint.ts</code>)</li></ul></td><td class="tb">Unit; v1 §11d</td></tr>
   </table>
 </section>
 

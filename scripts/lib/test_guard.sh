@@ -22,3 +22,11 @@ FOX_TEST_ALLOW_REAL_INSTALL=yes-destroy-my-data.
 MSG
 	exit 2
 fi
+
+# The suites count Blackbox entries and list tables, so sample data appearing on
+# its own would change what they see. They check the seed explicitly instead
+# (integration_test.sh §12), on a branch of their own.
+export FOX_NO_DEMO=1
+
+# Nothing here should open a browser: a suite is not a person at a keyboard.
+export FOX_NO_BROWSER=1

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getAdmins, getBranches, runQuery, API, type Branch, type BranchAdmins, type QueryResult } from '../api'
 import { BRAND } from '../brand'
+import { hintFor } from '../errhint'
 
 type DbObject = { schema: string; name: string; type: 'table' | 'view' }
 type Tab = 'rows' | 'structure' | 'indexes'
@@ -327,7 +328,17 @@ export default function Console() {
 function Grid({ res, showCommand }: { res: QueryResult; showCommand?: boolean }) {
   const [expanded, setExpanded] = useState<number | null>(null)
   useEffect(() => { setExpanded(null) }, [res]) // reset when new results arrive
-  if (res.error) return <div className="err">{res.error}</div>
+  if (res.error) {
+    // The raw message stays: it is what a Postgres user knows how to search for.
+    // The hint underneath is what a new one needs (web/src/errhint.ts).
+    const hint = hintFor(res.error)
+    return (
+      <div className="err">
+        {res.error}
+        {hint && <div className="err-hint">{hint}</div>}
+      </div>
+    )
+  }
   const cols = res.columns || []
   const rows = res.rows || []
   const openRow = expanded != null ? rows[expanded] : null

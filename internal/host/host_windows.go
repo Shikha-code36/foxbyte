@@ -75,6 +75,17 @@ func guestBin(name string) string {
 
 func forward(args []string) error { return forwardStdin(args, os.Stdin) }
 
+// forwardCapture runs a command in the distro and returns its stdout instead of
+// printing it (see the macOS twin).
+func forwardCapture(args []string) (string, error) {
+	name := currentDistro()
+	if !wslInstalled() || !distroExists(name) || !distroRunning(name) {
+		return "", fmt.Errorf("the %s distro is not running", brand.Product)
+	}
+	out, err := exec.Command("wsl.exe", wslArgs(name, guestBin(name), guestEnv(), args)...).Output()
+	return strings.TrimSpace(decodeWSLOutput(out)), err
+}
+
 func forwardStdin(args []string, stdin io.Reader) error {
 	if !wslInstalled() {
 		return fmt.Errorf("WSL is required on Windows. Install it with `wsl --install` (admin, then reboot), then run `fox setup`")
@@ -295,6 +306,9 @@ func finishSetup(name string) error {
 	// The first-run lines, with the setup token the sign-up page asks for, are
 	// part of the engine's start banner, which setup captured.
 	_ = forward([]string{"_first-run"})
+	// Setup runs the engine's start with its output captured, so the usual
+	// open-the-console step on `fox start` did not happen here.
+	openConsoleAfterStart()
 	return nil
 }
 

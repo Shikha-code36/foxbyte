@@ -572,6 +572,10 @@ td.name-cell { white-space: nowrap; }
 .err { color: color-mix(in srgb, var(--red) 78%, var(--text)); background: color-mix(in srgb, var(--red) 14%, var(--panel));
   border: 1px solid color-mix(in srgb, var(--red) 55%, var(--border));
   border-radius: 12px; padding: 11px 15px; margin-top: 14px; font-size: 13.5px; font-family: var(--font-mono); }
+/* The plain-English line under a raw Postgres error (web/src/errhint.ts): prose,
+   not monospace, so it reads as an explanation rather than more output. */
+.err-hint { margin-top: 9px; padding-top: 9px; font-family: var(--font-body); font-size: var(--t-sm); line-height: 1.5;
+  color: color-mix(in srgb, var(--text) 82%, var(--red)); border-top: 1px solid color-mix(in srgb, var(--red) 30%, transparent); }
 
 /* In-app confirmation modal (replaces window.confirm) */
 .modal-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;

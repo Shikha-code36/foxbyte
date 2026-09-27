@@ -23,6 +23,7 @@ import (
 	"github.com/thefoxbyte/foxbyte/internal/branch"
 	"github.com/thefoxbyte/foxbyte/internal/controlplane"
 	"github.com/thefoxbyte/foxbyte/internal/daemon"
+	"github.com/thefoxbyte/foxbyte/internal/errhint"
 	"github.com/thefoxbyte/foxbyte/internal/host"
 	"github.com/thefoxbyte/foxbyte/internal/ledger"
 	"github.com/thefoxbyte/foxbyte/internal/mcp"
@@ -71,8 +72,13 @@ Stack:
   up                   Bring up the stack: network + MinIO + primary 'main' (archiving)
   down                 Stop MinIO and all Postgres containers (ZFS data preserved)
   status               Show servers, main readiness, stored backups, and branches
+  check                Check this install and say what to do about anything wrong
   logs [gateway|api]   Print a background server's log
-  psql                 Open a psql shell on the primary 'main'
+  connect [branch]     Show how an application reaches a branch, then open psql on it
+  psql [branch]        Open a psql shell on a branch (default 'main')
+  demo seed|drop|sql [branch]
+                       The sample tables (users, projects, events). A first start
+                       seeds main; FOX_NO_DEMO=1 starts empty
 
 Durability / time-travel:
   backup create        Base backup of 'main' -> object storage
@@ -268,7 +274,13 @@ func main() {
 		fmt.Println()
 		must(branch.Status())
 	case "psql":
-		must(branch.PsqlShell("main"))
+		must(branch.PsqlShell(argOr(os.Args[2:], "main")))
+	case "check":
+		checkCmd(os.Args[2:])
+	case "connect":
+		must(branch.Connect(argOr(os.Args[2:], "main"), hasFlag(os.Args[2:], "--dsn")))
+	case "demo":
+		demoCmd(os.Args[2:])
 	case "backup":
 		if len(os.Args) < 3 {
 			fmt.Println("usage: fox backup <create|list|prune|target|export|restore>")
@@ -564,10 +576,16 @@ func branchCmd(args []string) {
 			fmt.Println("usage: fox branch create <name> [--from <branch>]")
 			os.Exit(2)
 		}
+		started := time.Now()
 		must(branch.Create(name, optValue(args[1:], "--from")))
 		// Made here, it is nobody's but an admin's — even if an account once
 		// owned a branch of that name.
 		forgetOwner(name)
+		// Create used to leave the container id docker printed as the last word
+		// on the screen. What a person needs is the name, how long it took, and
+		// a line they can paste into an application.
+		fmt.Printf("\nBranch %q is ready in %s.\n", name, took(started))
+		branch.PrintConnectHint(os.Stdout, name)
 	case "list":
 		must(branch.List())
 	case "delete":
@@ -638,6 +656,11 @@ func haCmd(args []string) {
 func must(err error) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
+		// A docker socket or a psql password message says nothing about what to
+		// type next; errhint adds that line when it recognises the failure.
+		if h := errhint.For(err); h != "" {
+			fmt.Fprintln(os.Stderr, "\n"+h)
+		}
 		os.Exit(1)
 	}
 }
@@ -659,6 +682,9 @@ func configPath() string { return filepath.Join(foxbyteDir(), "config") }
 func firstRunNotice() {
 	accounts, ok := anyAccount()
 	if !ok || accounts {
+		// Nothing to bootstrap; on a Linux host the console is still worth
+		// opening, since nobody typed a URL.
+		openConsole("")
 		return
 	}
 	tok, err := auth.EnsureSetupToken()
@@ -670,6 +696,26 @@ func firstRunNotice() {
 	fmt.Println("  " + tok)
 	fmt.Printf("(or `%s user create <email>` here). That first account can override the\n", brand.CLI)
 	fmt.Printf("destructive-change guardrail. `%s setup-token` shows the token again.\n", brand.CLI)
+	openConsole(tok)
+}
+
+// openConsole opens the web console for a user who is at this machine, with the
+// setup token already in the link when there is one. It does nothing inside the
+// engine VM (no display there — the host opens it after the forwarded start) and
+// nothing when there is no console in this build.
+func openConsole(setupToken string) {
+	if web.FS() == nil {
+		return
+	}
+	u := host.ConsoleURL("", setupToken)
+	if !host.OpenURL(u) {
+		return
+	}
+	if setupToken != "" {
+		fmt.Println("\nOpening the console, with the setup token filled in — choose an email and a password there.")
+		return
+	}
+	fmt.Printf("\nOpening the console: %s\n", u)
 }
 
 // setupTokenCmd prints the first-run setup token, while the install has no
