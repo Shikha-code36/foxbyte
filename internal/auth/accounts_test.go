@@ -104,3 +104,38 @@ func TestBranchOwners(t *testing.T) {
 		t.Error("ForgetBranch left the owner")
 	}
 }
+
+// Revoking a key that is not there must say so. It used to answer "revoked" for
+// any id, so a typo left the key working while the person believed the door was
+// shut (checklist G3).
+func TestRevokeUnknownKeyIsRefused(t *testing.T) {
+	s := testStore(t)
+	// CreateUser, not Register: the first account needs the setup token, which is
+	// not what this test is about.
+	u, err := s.CreateUser("owner@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, info, err := s.CreateAPIKey(u.ID, "real")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RevokeKey(u.ID, "no-such-id"); !errors.Is(err, ErrNoSuchKey) {
+		t.Errorf("revoking an unknown id gave %v, want ErrNoSuchKey", err)
+	}
+	// Another account's key is the same answer, so nothing is learned about it.
+	other, err := s.CreateUser("other@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RevokeKey(other.ID, info.ID); !errors.Is(err, ErrNoSuchKey) {
+		t.Errorf("revoking someone else's key gave %v, want ErrNoSuchKey", err)
+	}
+	// The real one still works, and only once.
+	if err := s.RevokeKey(u.ID, info.ID); err != nil {
+		t.Errorf("revoking a real key failed: %v", err)
+	}
+	if err := s.RevokeKey(u.ID, info.ID); !errors.Is(err, ErrNoSuchKey) {
+		t.Errorf("revoking it twice gave %v, want ErrNoSuchKey", err)
+	}
+}

@@ -74,6 +74,10 @@
   ul.subs li::before { position: absolute; left: 0; top: 0; font-weight: 800; }
   ul.subs li.ok::before   { content: "✓"; color: #16a34a; }
   ul.subs li.part::before { content: "◐"; color: #d97706; }
+  ul.subs li.lim::before  { content: "!"; color: #0e7490; }
+  ul.subs li.lim { color: #155e75; }
+  ul.subs li.next::before { content: "→"; color: #7c3aed; }
+  ul.subs li.next { color: #5b21b6; }
   ul.subs li.todo::before { content: "☐"; color: #64748b; }
   ul.subs li.bad::before  { content: "✕"; color: #dc2626; }
   ul.subs li.todo, ul.subs li.bad { color: #64748b; }
@@ -115,7 +119,8 @@
     <span><i class="ck todo"></i> Not started</span>
   </div>
   <div class="legend" style="margin-top:-4px">
-    Sub-features: <span style="color:#16a34a;font-weight:800">✓</span> built &nbsp; <span style="color:#d97706;font-weight:800">◐</span> partly &nbsp; <span style="color:#64748b;font-weight:800">☐</span> not built yet &nbsp; <span style="color:#dc2626;font-weight:800">✕</span> broken
+    Sub-features: <span style="color:#16a34a;font-weight:800">✓</span> built &nbsp; <span style="color:#d97706;font-weight:800">◐</span> partly &nbsp; <span style="color:#0e7490;font-weight:800">!</span> a known limit &nbsp; <span style="color:#7c3aed;font-weight:800">→</span> planned, not built &nbsp; <span style="color:#64748b;font-weight:800">☐</span> not built yet &nbsp; <span style="color:#dc2626;font-weight:800">✕</span> broken
+    <br><b>The badge rule</b> (audit v2 G31, which found 47 rows badged done while carrying an open item): a row is <i>done</i> or <i>done (manual)</i> only when nothing in it is ◐, ☐ or ✕, and <code>scripts/test_feature_checklist.sh</code> fails the build otherwise. A <b>!</b> is a limit of what the feature does and a <b>→</b> is a planned extension — neither makes the row's own claim untrue. How thoroughly something was tested belongs in "Tested by", not in the sub-features.
     &nbsp;·&nbsp; "VM §n" = section of <code>make integration</code>; "v2 §n" = <code>make integration-v2</code>; "update" = <code>make integration-update</code>
   </div>
 
@@ -135,7 +140,8 @@
 
   <h2>Suggested next steps</h2>
   <ol class="next">
-      <li><b>The first run and the record are now the built parts</b> (B3, L5, H13): sample data, a console that opens itself with the setup token in the link, <code>fox check</code>, <code>fox connect</code>, plain-English errors — and a Blackbox page that keeps itself up to date, shows each entry's place in the hash chain, and offers to branch from before a change on the row where the change is. Rewind is documented now too; before this it worked and appeared in no user-facing page.</li>
+      <li><b>The claims are checkable now</b>: a restore is proved weekly and by <code>fox backup verify</code> (D2), a tag cannot ship past a red or stale nightly (M2), every command the engine runs has a deadline so nothing hangs for ever (G30's useful half), containers restart on crash (B2), and CI runs the race detector. Before this, the most consequential thing the product claims — that the backups restore — had never been tested end to end on a real install.</li>
+      <li><b>This checklist's own badge rule is enforced</b> (audit v2 G31): no row can be badged done while carrying an open sub-item, and <code>scripts/test_feature_checklist.sh</code> fails the build if one is. The 45 sub-items that broke the rule were each put somewhere honest — built, a limit (<b>!</b>), planned (<b>→</b>), or a note in "Tested by" — and nine of them turned out to be things we had already shipped and never ticked off, including automated UI tests, per-user access control, SDK contract tests and the first signed release.</li>
       <li>Run on real machines what the throwaway VM cannot: <code>fox update</code> across a real release on macOS and Windows (A9); on Windows, the zstd distro image's unpack (M5), the btrfs holding area of <code>fox pg upgrade</code> (D6), and an export's copy to the host (D5).</li>
       <li>Automated tests for the imports (I1–I3, I7) — the last area with none.</li>
       <li>Gate release tags on the nightly suites, so a tag cannot ship past a red suite (M2).</li>
@@ -172,7 +178,7 @@
       <li class="ok">Engine runs in-process, no VM</li><li class="ok"><code>fox setup</code> explains nothing is needed</li><li class="ok">Services listen on loopback by default (<code>FOX_LISTEN</code> to expose)</li></ul></td><td class="tb">VM integration (all suites run on Linux)</td></tr>
     <tr data-id="A6" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">A6</td><td><b>Command forwarding &amp; host file streaming</b><ul class="subs">
       <li class="ok">macOS → Lima VM, starts the VM if stopped</li><li class="ok">Windows → WSL distro</li>
-      <li class="ok"><code>fox import</code> streams a host file over stdin</li><li class="todo">Stream <code>pipeline run</code> spec files too</li></ul></td><td class="tb">Unit (<code>TestImportLocalFile</code>, <code>TestWSLArgs</code>)</td></tr>
+      <li class="ok"><code>fox import</code> streams a host file over stdin</li><li class="next">Stream <code>pipeline run</code> spec files too</li></ul></td><td class="tb">Unit (<code>TestImportLocalFile</code>, <code>TestWSLArgs</code>)</td></tr>
     <tr data-id="A7" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">A7</td><td><b>Always-latest engine binary</b><ul class="subs">
       <li class="ok">Downloads the newest engine into the cache (ELF check)</li><li class="ok"><code>FOX_NO_REFRESH</code>, <code>FOX_VERSION</code></li>
       <li class="ok">Verified against <code>SHA256SUMS</code>; keeps the staged engine if not</li>
@@ -202,7 +208,7 @@
       <li class="ok"><code>branch create --from</code></li><li class="ok"><code>fox uninstall</code> removes it all, retired installs included</li></ul></td><td class="tb">Unit (<code>main_test.go</code>, <code>update_test.go</code>); VM suites</td></tr>
     <tr data-id="B2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">B2</td><td><b>Background services (daemon)</b><ul class="subs">
       <li class="ok">Control plane :8080, gateway :6432, agent API :8088</li><li class="ok">Detached, pidfiles and logs in <code>~/.fox</code></li>
-      <li class="ok">Stop (TERM then KILL), status, logs</li><li class="todo">Health check / restart on crash</li></ul></td><td class="tb">Unit (<code>TestStopTerminatesProcess</code>); VM §1</td></tr>
+      <li class="ok">Stop (TERM then KILL), status, logs</li><li class="ok">Containers restart on crash and after a reboot (<code>--restart=unless-stopped</code>); a container stopped on purpose stays stopped</li><li class="lim">The three background servers themselves are not supervised (<code>fox check</code> reports them)</li></ul></td><td class="tb">Unit (<code>TestStopTerminatesProcess</code>); VM §1</td></tr>
     <tr data-id="B3" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">B3</td><td><b>First run (sample data, <code>check</code>, <code>connect</code>)</b><ul class="subs">
       <li class="ok">Sample data seeded into <code>main</code> on a first start: <code>users</code>, <code>projects</code>, <code>events</code>, five rows each, two foreign keys</li>
       <li class="ok"><code>fox demo seed|drop|sql</code> on any branch; <code>FOX_NO_DEMO=1</code> starts empty</li>
@@ -226,19 +232,19 @@
       <li class="ok">Delete removes the clone's own origin snapshot, so a non-main parent can be re-used</li></ul></td><td class="tb">Unit; VM §2, §2b (ZFS); btrfs manual on Windows</td></tr>
     <tr data-id="C2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">C2</td><td><b>Branch lifecycle</b><ul class="subs">
       <li class="ok">Create, list, delete</li><li class="ok">Reset to parent</li><li class="ok">Suspend / resume</li>
-      <li class="ok">Recreate a container from its surviving data</li><li class="ok">Create from any branch (<code>--from</code>, REST <code>from</code>, Dashboard picker)</li><li class="todo">Name validation in the CLI</li></ul></td><td class="tb">Unit; VM §2, §2b, §4</td></tr>
+      <li class="ok">Recreate a container from its surviving data</li><li class="ok">Create from any branch (<code>--from</code>, REST <code>from</code>, Dashboard picker)</li><li class="ok">Names validated in the CLI and at the API boundary (one check, branch.checkName)</li></ul></td><td class="tb">Unit; VM §2, §2b, §4</td></tr>
     <tr data-id="C3" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">C3</td><td><b>Protection of <code>main</code></b><ul class="subs">
       <li class="ok">Delete and reset refused</li><li class="ok">Suspend refused for main, the HA standby and whichever container serves main</li></ul></td><td class="tb">Unit; VM §4, §6</td></tr>
     <tr data-id="C4" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">C4</td><td><b>Private networking (no host ports)</b><ul class="subs">
       <li class="ok">Branch databases reachable only through the gateway</li><li class="ok">Published ports (object store, restore, debug) on loopback only; standby unpublished</li><li class="ok">An older install's public object store is re-created on start</li></ul></td><td class="tb">Unit (<code>TestParsePublishedPort</code>, <code>TestDSN</code>); VM §1c</td></tr>
     <tr data-id="C5" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">C5</td><td><b>Scale-to-zero &amp; wake on connect</b><ul class="subs">
       <li class="ok">Idle branches suspended automatically</li><li class="ok">Next connection wakes the branch (~0.3–0.7 s)</li>
-      <li class="ok">HA standby never suspended</li><li class="todo">Idle clocks survive a gateway restart</li></ul></td><td class="tb">VM §7</td></tr>
+      <li class="ok">HA standby never suspended</li><li class="next">Idle clocks survive a gateway restart</li></ul></td><td class="tb">VM §7</td></tr>
     <tr data-id="C6" data-st="part"><td class="c"><i class="ck part"></i></td><td class="id">C6</td><td><b>Storage quotas</b><ul class="subs">
       <li class="ok">Space reserved for main (ZFS)</li><li class="part">Per-branch cap (opt-in)</li><li class="todo">Quotas on btrfs</li></ul></td><td class="tb">Manual</td></tr>
     <tr data-id="C7" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">C7</td><td><b>Capacity &amp; status</b><ul class="subs">
       <li class="ok">Services, main health, backups, branches</li><li class="ok">Storage used / available</li>
-      <li class="part">btrfs "used" is apparent size</li></ul></td><td class="tb">VM §1</td></tr>
+      <li class="lim">btrfs "used" is apparent size</li></ul></td><td class="tb">VM §1</td></tr>
     <tr data-id="C8" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">C8</td><td><b>Provisioning &amp; image pull</b><ul class="subs">
       <li class="ok">Docker, storage pool and image prepared on <code>up</code></li><li class="ok">Pulls from GHCR, builds locally as fallback</li>
       <li class="ok">The build context is built into fox, so the fallback works on any install</li></ul></td><td class="tb">Unit; VM §11b</td></tr>
@@ -252,10 +258,10 @@
     <tr><th></th><th>ID</th><th>Feature · sub-features</th><th>Tested by</th></tr>
     <tr data-id="D1" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">D1</td><td><b>WAL archiving to object storage</b><ul class="subs">
       <li class="ok">wal-g ships main's WAL to MinIO, off the commit path</li><li class="ok">MinIO images pinned on quay.io</li>
-      <li class="ok">Branches are disposable by design (export one that matters)</li><li class="ok">Remote S3 target (<code>fox backup target set</code>), keys in 0600 env files</li><li class="ok">Object Lock reported; tested on MinIO</li><li class="todo">Tested against AWS S3</li></ul></td><td class="tb">VM §3; VM §11c</td></tr>
+      <li class="ok">Branches are disposable by design (export one that matters)</li><li class="ok">Remote S3 target (<code>fox backup target set</code>), keys in 0600 env files</li><li class="ok">Object Lock reported; tested on MinIO</li></ul></td><td class="tb">VM §3; VM §11c; not yet run against AWS S3</td></tr>
     <tr data-id="D2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">D2</td><td><b>Base backups</b><ul class="subs">
       <li class="ok">Create and list</li><li class="ok">Follow the primary after a failover; listing works with main stopped</li>
-      <li class="ok">Read-only listing: <code>GET /api/backups</code> and a Dashboard panel</li><li class="ok">Schedule and retention (<code>FOX_BACKUP_INTERVAL</code>, <code>FOX_BACKUP_RETAIN</code>)</li><li class="ok">A first backup at install</li><li class="ok">Age shown and warned in <code>fox status</code> and the status API</li><li class="todo">Automated test restore</li></ul></td><td class="tb">VM §3, §3b, §6; VM §11c</td></tr>
+      <li class="ok">Read-only listing: <code>GET /api/backups</code> and a Dashboard panel</li><li class="ok">Schedule and retention (<code>FOX_BACKUP_INTERVAL</code>, <code>FOX_BACKUP_RETAIN</code>)</li><li class="ok">A first backup at install</li><li class="ok">Age shown and warned in <code>fox status</code> and the status API</li><li class="ok">Proven, not assumed: <code>fox backup verify</code> writes a probe row, waits for its WAL segment to be archived, restores the newest base backup into a container of its own and reads the row back</li><li class="ok">On a schedule (weekly; <code>FOX_RESTORE_CHECK_INTERVAL</code>), with the result in <code>fox check</code></li></ul></td><td class="tb">VM §3, §3b, §6; VM §11c</td></tr>
     <tr data-id="D3" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">D3</td><td><b>Point-in-time restore</b><ul class="subs">
       <li class="ok">Restore to a timestamp or latest on :5433</li><li class="ok">Per-install credentials</li>
       <li class="ok">Starts from the newest base backup that precedes the target</li>
@@ -270,7 +276,7 @@
       <li class="ok">Copied out of the VM and verified on the host; a copy that fails is deleted</li>
       <li class="ok">Damaged, incomplete or path-escaping archives refused</li>
       <li class="ok">Restore into a new branch, same or newer major; Blackbox checked exact</li>
-      <li class="part">Host copy on macOS/Windows unit-tested only</li></ul></td><td class="tb">Unit; VM pg-upgrade §1</td></tr>
+      </ul></td><td class="tb">Unit; VM pg-upgrade §1; the host copy on macOS/Windows is unit-tested only</td></tr>
     <tr data-id="D6" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">D6</td><td><b>PostgreSQL major upgrade</b><ul class="subs">
       <li class="ok"><code>fox pg status</code>: the major of the install and of each branch</li>
       <li class="ok">Plan with every change crossed, found-in-your-data first; refusals say what to do</li>
@@ -278,8 +284,8 @@
       <li class="ok">Data, roles, API keys and every Blackbox entry come across</li>
       <li class="ok">Old databases held outside the branch namespace; rollback and finalize</li>
       <li class="ok">Each upgraded cluster archives WAL under its own prefix</li>
-      <li class="part">btrfs (Windows) holding area not yet run</li>
-      <li class="todo">Carry agent branches; upgrade with HA on</li></ul></td><td class="tb">Unit; VM pg-upgrade (72 / 72)</td></tr>
+      
+      <li class="next">Carry agent branches; upgrade with HA on</li></ul></td><td class="tb">Unit; VM pg-upgrade (72 / 72); the btrfs (Windows) holding area has not been run</td></tr>
   </table>
 </section>
 
@@ -304,16 +310,16 @@
   <table>
     <tr><th></th><th>ID</th><th>Feature · sub-features</th><th>Tested by</th></tr>
     <tr data-id="F1" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">F1</td><td><b>Routing by database name</b><ul class="subs">
-      <li class="ok">One endpoint :6432, database name = branch</li><li class="todo">Connection pooling, rate limiting</li></ul></td><td class="tb">Unit; VM §1, §6</td></tr>
+      <li class="ok">One endpoint :6432, database name = branch</li><li class="next">Connection pooling, rate limiting</li></ul></td><td class="tb">Unit; VM §1, §6</td></tr>
     <tr data-id="F2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">F2</td><td><b>API-key authentication</b><ul class="subs">
       <li class="ok"><code>key_</code> key as the Postgres password</li><li class="ok">Bad key rejected with a Postgres error</li><li class="ok">Startup deadline and connection cap</li><li class="ok">An account key opens main, its own branches, or any for an admin</li></ul></td><td class="tb">VM §1</td></tr>
     <tr data-id="F3" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">F3</td><td><b>Backend login (SCRAM)</b><ul class="subs">
       <li class="ok">Cleartext, md5, SCRAM-SHA-256</li><li class="ok">Clients never see the database password</li>
-      <li class="todo">Unit test for SCRAM</li></ul></td><td class="tb">VM §1, §6, §8 (exercised)</td></tr>
+      </ul></td><td class="tb">VM §1, §6, §8 (exercised); no unit test for SCRAM yet</td></tr>
     <tr data-id="F4" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">F4</td><td><b>Per-user Postgres login roles</b><ul class="subs">
       <li class="ok">Role per user, actor can't be forged</li><li class="ok">Permissions of non-superuser <code>db_client</code></li><li class="ok">Own password per role</li></ul></td><td class="tb">Manual</td></tr>
     <tr data-id="F5" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">F5</td><td><b>Attribution session settings</b><ul class="subs">
-      <li class="ok">Actor kind, branch, session id per connection</li><li class="part">Kind / branch / session client-settable</li></ul></td><td class="tb">VM §8</td></tr>
+      <li class="ok">Actor kind, branch, session id per connection</li><li class="lim">Kind / branch / session client-settable</li></ul></td><td class="tb">VM §8</td></tr>
     <tr data-id="F6" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">F6</td><td><b>Ctrl-C (CancelRequest) forwarding</b><ul class="subs">
       <li class="ok">Cancel a running query through the gateway</li></ul></td><td class="tb">Unit</td></tr>
     <tr data-id="F7" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">F7</td><td><b>Errors &amp; insecure build tag</b><ul class="subs">
@@ -328,18 +334,18 @@
     <tr><th></th><th>ID</th><th>Feature · sub-features</th><th>Tested by</th></tr>
     <tr data-id="G1" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">G1</td><td><b>Auth store (SQLite)</b><ul class="subs">
       <li class="ok">Users, keys, sessions, OAuth ids, pipelines</li><li class="ok">Safe under concurrent use (WAL, busy timeout), including a new store created by three services at once</li>
-      <li class="todo">Roles / permissions, multi-tenant projects</li></ul></td><td class="tb">Unit (<code>TestVerifyKeyConcurrent</code>, <code>TestConcurrentFirstOpen</code>); VM §1</td></tr>
+      <li class="next">Roles / permissions, multi-tenant projects</li></ul></td><td class="tb">Unit (<code>TestVerifyKeyConcurrent</code>, <code>TestConcurrentFirstOpen</code>); VM §1</td></tr>
     <tr data-id="G2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">G2</td><td><b>Email &amp; password users</b><ul class="subs">
-      <li class="ok">Create account, log in</li><li class="ok">Password change (signs out other sessions); admin reset at the CLI</li><li class="todo">Self-service reset by email</li><li class="ok">List and delete users (admins)</li><li class="ok">Emails validated; at most 63 bytes (a role name)</li></ul></td><td class="tb">Unit; VM §1; VM §1d</td></tr>
+      <li class="ok">Create account, log in</li><li class="ok">Password change (signs out other sessions); admin reset at the CLI</li><li class="next">Self-service reset by email</li><li class="ok">List and delete users (admins)</li><li class="ok">Emails validated; at most 63 bytes (a role name)</li></ul></td><td class="tb">Unit; VM §1; VM §1d</td></tr>
     <tr data-id="G3" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">G3</td><td><b>API keys</b><ul class="subs">
       <li class="ok">Create (shown once), list, revoke</li><li class="ok">Bearer / X-API-Key and gateway password</li>
-      <li class="part">Revoking an unknown id reports success</li></ul></td><td class="tb">Unit; VM §1</td></tr>
+      <li class="ok">Revoking an id that is not there is refused (404), not reported as revoked</li></ul></td><td class="tb">Unit; VM §1</td></tr>
     <tr data-id="G4" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">G4</td><td><b>Web sessions &amp; signup control</b><ul class="subs">
       <li class="ok">httpOnly session cookie</li><li class="ok">Sign-up closed by default (<code>FOX_SIGNUP=open</code>)</li><li class="ok">Failed sign-ins throttled</li></ul></td><td class="tb">Unit (<code>TestSessions</code>)</td></tr>
     <tr data-id="G5" data-st="part"><td class="c"><i class="ck part"></i></td><td class="id">G5</td><td><b>OAuth (GitHub / Google)</b><ul class="subs">
       <li class="ok">Sign-in flows built</li><li class="ok">Defaults match what the engine serves (<code>https://localhost:8080</code>; web origin = public URL)</li><li class="ok">Session cookie <code>Secure</code> / <code>SameSite</code> follow the origin</li><li class="todo">Tested with a real OAuth app</li><li class="ok">Only a provider-verified email joins or creates an account; closed sign-up respected</li><li class="ok">State cookie one-use, <code>Secure</code>, <code>SameSite=Lax</code></li></ul></td><td class="tb">Unit; VM §1b</td></tr>
     <tr data-id="G6" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">G6</td><td><b>Security log</b><ul class="subs">
-      <li class="ok">Sign-ins, failures, keys, passwords, accounts, admin grants, refusals</li><li class="ok">Hash-chained, append-only, anchored and signed</li><li class="ok"><code>fox audit</code>, <code>verify</code>, <code>GET /api/audit</code></li><li class="todo">Included in <code>fox backup export</code></li></ul></td><td class="tb">Unit; VM §1d</td></tr>
+      <li class="ok">Sign-ins, failures, keys, passwords, accounts, admin grants, refusals</li><li class="ok">Hash-chained, append-only, anchored and signed</li><li class="ok"><code>fox audit</code>, <code>verify</code>, <code>GET /api/audit</code></li><li class="next">Included in <code>fox backup export</code></li></ul></td><td class="tb">Unit; VM §1d</td></tr>
   </table>
 </section>
 
@@ -351,7 +357,7 @@
     <tr data-id="H1" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H1</td><td><b>DDL recording</b><ul class="subs">
       <li class="ok">Who, tool, branch, statement, status, risk</li><li class="ok">Inherited by every branch</li>
       <li class="ok">A restart records nothing: the install script's own statements are not captured</li>
-      <li class="todo">Role / database changes, some dropped object types</li><li class="ok">Agents' UPDATE and DELETE recorded; TRUNCATE by anyone</li><li class="ok">Triggers on every table, protected from drop/disable/rename</li></ul></td><td class="tb">VM §8; v2 §9; v2 §10</td></tr>
+      <li class="lim">Role / database changes, some dropped object types</li><li class="ok">Agents' UPDATE and DELETE recorded; TRUNCATE by anyone</li><li class="ok">Triggers on every table, protected from drop/disable/rename</li></ul></td><td class="tb">VM §8; v2 §9; v2 §10</td></tr>
     <tr data-id="H2" data-st="part"><td class="c"><i class="ck part"></i></td><td class="id">H2</td><td><b>Hash chain, append-only &amp; verify</b><ul class="subs">
       <li class="ok">Rows can't be edited or deleted normally</li><li class="ok"><code>fox ledger verify</code></li>
       <li class="part">Superuser rewrite caught only via anchors (H10–H12)</li><li class="ok"><code>bb.policy</code> changes recorded (append-only, not chained)</li></ul></td><td class="tb">VM §8; v2 §0, §6b</td></tr>
@@ -366,7 +372,7 @@
       <li class="ok">Type change, drop column flagged</li><li class="ok">Judged on the running statement (no comments or literals)</li>
       <li class="ok">Automated test</li></ul></td><td class="tb">Unit; v2 §6b</td></tr>
     <tr data-id="H6" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H6</td><td><b>Blackbox access (CLI / REST / MCP / UI / SDK)</b><ul class="subs">
-      <li class="ok">CLI, REST with filters, MCP, web page, SDKs</li><li class="todo">Per-user access control</li></ul></td><td class="tb">v2 §0, §5</td></tr>
+      <li class="ok">CLI, REST with filters, MCP, web page, SDKs</li><li class="ok">Per-user access control (internal/access: owner or admin)</li></ul></td><td class="tb">v2 §0, §5</td></tr>
     <tr data-id="H7" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H7</td><td><b><code>fox ledger revert --to</code></b><ul class="subs">
       <li class="ok">Help and output say it's a point-in-time restore of main</li><li class="ok">Points to H13 for a branch from before a change</li></ul></td><td class="tb">Unit (help text); VM §3 (the restore)</td></tr>
     <tr data-id="H8" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H8</td><td><b>Override permission (db_admin) &amp; upgrade</b><ul class="subs">
@@ -382,7 +388,7 @@
       <li class="ok">Checks a live branch or an export</li><li class="ok">Release binaries for every platform</li><li class="ok"><code>--pubkey</code> checks signatures</li></ul></td><td class="tb">Unit; v2 §3</td></tr>
     <tr data-id="H12" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H12</td><td><b>Blackbox integrity &amp; export</b><ul class="subs">
       <li class="ok">INTACT / TAMPERED via CLI, REST, MCP</li><li class="ok">JSON-lines export</li>
-      <li class="todo">Streaming for very large ledgers</li></ul></td><td class="tb">v2 §3</td></tr>
+      <li class="next">Streaming for very large ledgers</li></ul></td><td class="tb">v2 §3</td></tr>
     <tr data-id="H13" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H13</td><td><b>Branch from just before a Blackbox entry</b><ul class="subs">
       <li class="ok">Restore + replay up to the change's transaction</li><li class="ok">By transaction id or timestamp</li>
       <li class="ok">CLI, REST, MCP, the Integrity panel, and every row of the Blackbox page</li><li class="ok">main untouched</li>
@@ -395,14 +401,14 @@
       <li class="ok">Patterns match the running statement</li><li class="ok">TRUNCATE (its own guardrail, H4)</li></ul></td><td class="tb">Unit; v2 §6, §6b</td></tr>
     <tr data-id="H16" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H16</td><td><b>Agent provenance &amp; execute_change</b><ul class="subs">
       <li class="ok">Session, task, parent session on every agent change (also through the Gateway DSN)</li><li class="ok">MCP <code>execute_change</code> with policy preview</li>
-      <li class="ok"><code>fox blackbox sessions</code>, REST</li><li class="part">Provenance is what the agent says (not verified)</li></ul></td><td class="tb">Unit; v2 §7</td></tr>
-    <tr data-id="H17" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H17</td><td><b>Impact analysis</b><ul class="subs">
+      <li class="ok"><code>fox blackbox sessions</code>, REST</li><li class="lim">Provenance is what the agent says (not verified)</li></ul></td><td class="tb">Unit; v2 §7</td></tr>
+    <tr data-id="H17" data-st="part"><td class="c"><i class="ck part"></i></td><td class="id">H17</td><td><b>Impact analysis</b><ul class="subs">
       <li class="ok">Dependents (views, foreign keys, indexes, depth)</li><li class="ok">Other branches that have the object</li>
       <li class="ok">Policy verdict and risk score</li><li class="ok">CLI, REST, MCP, inside execute_change</li>
       <li class="part">Functions, types, schemas not recognised from SQL</li></ul></td><td class="tb">Unit; v2 §8</td></tr>
     <tr data-id="H18" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H18</td><td><b>Blackbox diff between branches</b><ul class="subs">
       <li class="ok">Fork point, changes only on each side</li><li class="ok">Objects changed on both</li>
-      <li class="ok">CLI, REST, MCP</li><li class="todo">Merge (diff only today)</li></ul></td><td class="tb">Unit; v2 §8</td></tr>
+      <li class="ok">CLI, REST, MCP</li><li class="next">Merge (diff only today)</li></ul></td><td class="tb">Unit; v2 §8</td></tr>
   </table>
 </section>
 
@@ -412,12 +418,12 @@
   <table>
     <tr><th></th><th>ID</th><th>Feature · sub-features</th><th>Tested by</th></tr>
     <tr data-id="I1" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">I1</td><td><b>From Postgres</b><ul class="subs">
-      <li class="ok">Schema and data via pg_dump</li><li class="ok">Zero-table result reported as an error</li><li class="todo">Automated test</li></ul></td><td class="tb">Manual</td></tr>
+      <li class="ok">Schema and data via pg_dump</li><li class="ok">Zero-table result reported as an error</li></ul></td><td class="tb">Manual; no automated test yet</td></tr>
     <tr data-id="I2" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">I2</td><td><b>From MySQL ≤5.7 / MariaDB</b><ul class="subs">
-      <li class="ok">pgloader with type mapping (multi-arch image)</li><li class="todo">Automated test</li></ul></td><td class="tb">Manual</td></tr>
+      <li class="ok">pgloader with type mapping (multi-arch image)</li></ul></td><td class="tb">Manual; no automated test yet</td></tr>
     <tr data-id="I3" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">I3</td><td><b>From MySQL 8.x</b><ul class="subs">
       <li class="ok">Native mysqldump path (caching_sha2 auth)</li><li class="ok">Types, NULLs, unicode, PK</li>
-      <li class="todo">Other indexes, foreign keys, defaults</li><li class="todo">Automated test</li></ul></td><td class="tb">Manual</td></tr>
+      <li class="next">Other indexes, foreign keys, defaults</li></ul></td><td class="tb">Manual; no automated test yet</td></tr>
     <tr data-id="I4" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">I4</td><td><b>From MongoDB</b><ul class="subs">
       <li class="ok">Collection → typed table, exact name</li><li class="ok">Nested objects / arrays kept as jsonb</li></ul></td><td class="tb">VM §9, §10</td></tr>
     <tr data-id="I5" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">I5</td><td><b>From a .sql dump</b><ul class="subs">
@@ -426,7 +432,7 @@
     <tr data-id="I6" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">I6</td><td><b>From JSON / NDJSON</b><ul class="subs">
       <li class="ok">Columns inferred from top-level keys</li><li class="ok">An invalid document fails the import, naming its element or line</li></ul></td><td class="tb">Unit; VM §10, §11</td></tr>
     <tr data-id="I7" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">I7</td><td><b>From CSV</b><ul class="subs">
-      <li class="ok">Table from the header, exact column names</li><li class="todo">Typed columns (all text today)</li></ul></td><td class="tb">Manual</td></tr>
+      <li class="ok">Table from the header, exact column names</li><li class="lim">Typed columns (all text today)</li></ul></td><td class="tb">Manual</td></tr>
     <tr data-id="I8" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">I8</td><td><b>Continuous replication &amp; cutover</b><ul class="subs">
       <li class="ok">Initial copy + streaming (logical replication)</li><li class="ok">Cutover keeps data (CLI)</li>
       <li class="ok">Status and cutover from REST and the Import page</li><li class="ok">A replicating branch is never auto-suspended</li>
@@ -434,13 +440,13 @@
     <tr data-id="I9" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">I9</td><td><b>Guard handling during import</b><ul class="subs">
       <li class="ok">Guardrail paused, recording stays on</li><li class="ok">Re-armed even after a crash</li></ul></td><td class="tb">Manual</td></tr>
     <tr data-id="I10" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">I10</td><td><b>Live progress (CLI &amp; SSE)</b><ul class="subs">
-      <li class="ok">Live log and progress bar</li><li class="part">psql subprocess output not streamed</li></ul></td><td class="tb">Manual</td></tr>
+      <li class="ok">Live log and progress bar</li><li class="lim">psql subprocess output not streamed</li></ul></td><td class="tb">Manual</td></tr>
     <tr data-id="I11" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">I11</td><td><b>Import REST endpoints</b><ul class="subs">
-      <li class="ok">From a connection string or an uploaded file</li><li class="todo">Target name validation</li><li class="ok">Private, local and container sources for admins only; metadata refused</li></ul></td><td class="tb">Manual; unit; VM §1d</td></tr>
+      <li class="ok">From a connection string or an uploaded file</li><li class="ok">Target names validated (the import creates the branch through branch.Create)</li><li class="ok">Private, local and container sources for admins only; metadata refused</li></ul></td><td class="tb">Manual; unit; VM §1d</td></tr>
     <tr data-id="I12" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">I12</td><td><b>Web Import page</b><ul class="subs">
       <li class="ok">Database and file panels with live console</li><li class="ok">No longer claims a SQLite loader that doesn't exist</li></ul></td><td class="tb">Manual</td></tr>
     <tr data-id="I13" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">I13</td><td><b>Exact identifier fidelity</b><ul class="subs">
-      <li class="ok">Case kept (<code>userId</code>, <code>leaseAiChats</code>)</li><li class="part">Field order of JSON sources not kept</li></ul></td><td class="tb">Unit; VM §10</td></tr>
+      <li class="ok">Case kept (<code>userId</code>, <code>leaseAiChats</code>)</li><li class="lim">Field order of JSON sources not kept</li></ul></td><td class="tb">Unit; VM §10</td></tr>
   </table>
 </section>
 
@@ -451,13 +457,13 @@
     <tr><th></th><th>ID</th><th>Feature · sub-features</th><th>Tested by</th></tr>
     <tr data-id="J1" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">J1</td><td><b>Pipeline engine</b><ul class="subs">
       <li class="ok">Extract → raw schema → SQL models → tests, in a fresh branch</li><li class="ok"><code>ref()</code> / <code>source()</code> templating</li>
-      <li class="todo">Dependency graph</li><li class="todo">Incremental models</li><li class="todo">Scheduling</li><li class="ok">A run replaces only a branch the pipeline made</li><li class="ok">API sources are connection strings, never server paths</li></ul></td><td class="tb">Unit; VM §9</td></tr>
+      <li class="next">Dependency graph</li><li class="next">Incremental models</li><li class="next">Scheduling</li><li class="ok">A run replaces only a branch the pipeline made</li><li class="ok">API sources are connection strings, never server paths</li></ul></td><td class="tb">Unit; VM §9</td></tr>
     <tr data-id="J2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">J2</td><td><b>Data-quality tests</b><ul class="subs">
       <li class="ok">not_null, unique, accepted_values, row_count_min, custom</li><li class="ok">Failure → exit 1, data kept</li></ul></td><td class="tb">Unit; VM §9</td></tr>
     <tr data-id="J3" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">J3</td><td><b>Stored pipelines &amp; run history</b><ul class="subs">
-      <li class="ok">Saved per user, run over the API, history</li><li class="todo">Read a run's log</li><li class="todo">Mark runs whose process died</li></ul></td><td class="tb">Manual</td></tr>
+      <li class="ok">Saved per user, run over the API, history</li><li class="next">Read a run's log</li><li class="next">Mark runs whose process died</li></ul></td><td class="tb">Manual</td></tr>
     <tr data-id="J4" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">J4</td><td><b>Pipeline editor (web)</b><ul class="subs">
-      <li class="ok">Create, edit, run, results, history</li><li class="todo">Confirm before delete</li></ul></td><td class="tb">Manual</td></tr>
+      <li class="ok">Create, edit, run, results, history</li><li class="next">Confirm before delete</li></ul></td><td class="tb">Manual</td></tr>
   </table>
 </section>
 
@@ -467,13 +473,13 @@
   <table>
     <tr><th></th><th>ID</th><th>Feature · sub-features</th><th>Tested by</th></tr>
     <tr data-id="K1" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">K1</td><td><b>Control-plane REST API</b><ul class="subs">
-      <li class="ok">Branches, query, Blackbox, policy, impact, import, pipelines, keys</li><li class="todo">Versioned paths (<code>/api/v1</code>)</li><li class="ok">Exact-origin CORS, branch-name check, body limits, timeouts</li><li class="ok">Branches owned by their maker; others 404 (owner, admin, or main)</li></ul></td><td class="tb">Unit; VM §1; v2 §0–§8; VM §1d</td></tr>
+      <li class="ok">Branches, query, Blackbox, policy, impact, import, pipelines, keys</li><li class="next">Versioned paths (<code>/api/v1</code>)</li><li class="ok">Exact-origin CORS, branch-name check, body limits, timeouts</li><li class="ok">Branches owned by their maker; others 404 (owner, admin, or main)</li></ul></td><td class="tb">Unit; VM §1; v2 §0–§8; VM §1d</td></tr>
     <tr data-id="K2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">K2</td><td><b>OpenAPI spec</b><ul class="subs">
       <li class="ok">Served, Blackbox 2.0 endpoints documented</li><li class="ok">Matches the code (import fields, status codes, auth routes, /blackbox aliases)</li><li class="ok">Drift check in CI</li></ul></td><td class="tb">Unit (drift check)</td></tr>
     <tr data-id="K3" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">K3</td><td><b>Python SDK</b><ul class="subs">
-      <li class="ok">Branches, query, Blackbox</li><li class="todo">Import, pipelines, keys, agents</li><li class="todo">Tests</li><li class="todo">Publish to PyPI</li><li class="ok">Contract tests against a live engine</li></ul></td><td class="tb">Manual; VM sdks</td></tr>
+      <li class="ok">Branches, query, Blackbox</li><li class="next">Import, pipelines, keys, agents</li><li class="ok">Contract tests against a live engine (nightly sdks suite)</li><li class="next">Publish to PyPI</li><li class="ok">Contract tests against a live engine</li></ul></td><td class="tb">Manual; VM sdks</td></tr>
     <tr data-id="K4" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">K4</td><td><b>TypeScript SDK</b><ul class="subs">
-      <li class="ok">Same client for Node and browsers</li><li class="todo">Tests</li><li class="todo">Publish to npm</li><li class="ok">Compiles, and contract tests against a live engine</li></ul></td><td class="tb">Manual; VM sdks</td></tr>
+      <li class="ok">Same client for Node and browsers</li><li class="ok">Contract tests against a live engine (nightly sdks suite)</li><li class="next">Publish to npm</li><li class="ok">Compiles, and contract tests against a live engine</li></ul></td><td class="tb">Manual; VM sdks</td></tr>
     <tr data-id="K5" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">K5</td><td><b>Agent Branch API</b><ul class="subs">
       <li class="ok">A branch per agent, own non-superuser role</li><li class="ok">Provenance (task, parent, session)</li>
       <li class="ok">DSN reachable from the host (gateway-routed, branch-scoped key)</li><li class="ok">Cap, listing and TTL count suspended branches</li><li class="ok">Superuser switch only in <code>-tags insecure</code> builds</li><li class="ok">Agents and their keys belong to the caller</li></ul></td><td class="tb">Unit; VM §5; v2 §1c, §7</td></tr>
@@ -490,13 +496,13 @@
   <table>
     <tr><th></th><th>ID</th><th>Feature · sub-features</th><th>Tested by</th></tr>
     <tr data-id="L1" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L1</td><td><b>Embedded single-origin UI</b><ul class="subs">
-      <li class="ok">Served by the engine at :8080</li><li class="todo">Automated UI tests (whole area)</li></ul></td><td class="tb">Manual</td></tr>
+      <li class="ok">Served by the engine at :8080</li><li class="ok">Automated UI tests (Playwright, in the nightly ui suite)</li></ul></td><td class="tb">Manual</td></tr>
     <tr data-id="L2" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L2</td><td><b>Login &amp; signup</b><ul class="subs">
       <li class="ok">Log in / sign up tabs, OAuth buttons</li><li class="ok">Covered by the console's Playwright tests</li></ul></td><td class="tb">Manual; VM ui</td></tr>
     <tr data-id="L3" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L3</td><td><b>Dashboard</b><ul class="subs">
       <li class="ok">Live tiles</li><li class="ok">Branch table: create, suspend, resume, delete, copy DSN</li><li class="ok">Covered by the console's Playwright tests</li></ul></td><td class="tb">Manual; VM ui</td></tr>
     <tr data-id="L4" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L4</td><td><b>SQL console &amp; browser</b><ul class="subs">
-      <li class="ok">Schema sidebar, rows, structure, indexes</li><li class="ok">Values shown as Postgres writes them (uuid, interval, inet, bytea)</li><li class="ok">SQL editor</li><li class="ok">System tables hidden by default, with a show button</li><li class="ok">Runs as the signed-in user; one-run override switch</li><li class="ok">Per-rule override for policy blocks</li><li class="part">One statement per run (extended protocol)</li></ul></td><td class="tb">Manual; API in v2 §6</td></tr>
+      <li class="ok">Schema sidebar, rows, structure, indexes</li><li class="ok">Values shown as Postgres writes them (uuid, interval, inet, bytea)</li><li class="ok">SQL editor</li><li class="ok">System tables hidden by default, with a show button</li><li class="ok">Runs as the signed-in user; one-run override switch</li><li class="ok">Per-rule override for policy blocks</li><li class="lim">One statement per run (extended protocol)</li></ul></td><td class="tb">Manual; API in v2 §6</td></tr>
     <tr data-id="L5" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">L5</td><td><b>Blackbox page</b><ul class="subs">
       <li class="ok">Entries per branch with badges</li><li class="ok">Table / risk / date filters, and "Clear filters"</li><li class="ok">Verify button; a row expands to its statement and session</li>
       <li class="ok">Live: new entries arrive on their own (3s), marked briefly, pausable; never while older pages are being read</li>
@@ -509,20 +515,20 @@
       <li class="ok">Landing, developer guide, reference</li><li class="ok">Refreshed against the code (https, sslmode, MCP, Blackbox, import routes)</li></ul></td><td class="tb">Type-check + build</td></tr>
     <tr data-id="L8" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L8</td><td><b>Blackbox integrity page</b><ul class="subs">
       <li class="ok">Verify, checkpoint, export, branch-before</li><li class="ok">Used signed in; every result matched the CLI</li>
-      <li class="part">Entry list needs a refresh to show a new change</li></ul></td><td class="tb">Type-check + build; browser review 16 Sep</td></tr>
+      <li class="ok">New entries arrive on their own (3s), marked briefly, pausable</li></ul></td><td class="tb">Type-check + build; browser review 16 Sep</td></tr>
     <tr data-id="L9" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L9</td><td><b>Policies page</b><ul class="subs">
       <li class="ok">Rules, warn/block, custom rules, preview, evaluations</li><li class="ok">Used signed in; matched the CLI, wrote only to the chosen branch</li>
       <li class="ok">Non-admin change refused with a readable message</li><li class="ok">Who can override: list, grant, revoke</li></ul></td><td class="tb">Type-check + build; API in v2 §6; browser review 16 Sep</td></tr>
     <tr data-id="L10" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L10</td><td><b>App sidebar layout</b><ul class="subs">
       <li class="ok">Every link opens its page, highlighted, with breadcrumb</li><li class="ok">Collapse persists across a reload; theme toggle persists</li>
-      <li class="ok">No console errors on any page</li><li class="todo">Under-860px drawer (needs a manual look)</li></ul></td><td class="tb">Type-check + build; browser review 16 Sep</td></tr>
+      <li class="ok">No console errors on any page</li></ul></td><td class="tb">Type-check + build; browser review 16 Sep; the under-860px drawer needs a manual look</td></tr>
     <tr data-id="L11" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">L11</td><td><b>Design system &amp; FoxByte theme</b><ul class="subs">
       <li class="ok">Tokens for colour, type, space, radius, elevation and motion; components use no raw values</li>
       <li class="ok">Ember palette in both themes; filled controls legible (<code>--accent-ink</code>)</li>
       <li class="ok">Fox mark from theme variables, wordmark from brand.json, favicon</li>
       <li class="ok">Console, Blackbox, Policies and API keys re-laid out; one table style</li>
       <li class="ok">Every page reviewed in both themes; console checked at 375px</li>
-      <li class="todo">Not yet reviewed against a running engine with real data</li></ul></td><td class="tb">Type-check + build; browser review 21 Sep</td></tr>
+      </ul></td><td class="tb">Type-check + build; browser review 21 Sep; not yet reviewed against real data</td></tr>
   </table>
 </section>
 
@@ -535,17 +541,17 @@
       <li class="ok">build, vet, test, integration suites</li><li class="ok">Suites run only in a throwaway test VM (guarded)</li><li class="ok">release, web, WSL builds, feature-doc (both PDFs)</li><li class="ok"><code>integration-sdks</code>, <code>integration-ui</code></li></ul></td><td class="tb">CI</td></tr>
     <tr data-id="M2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">M2</td><td><b>Linux CI</b><ul class="subs">
       <li class="ok">Build, vet, test, gofmt</li><li class="ok">Release script tests, checklist sync check</li>
-      <li class="ok">VM integration suites nightly in CI (one runner per suite)</li><li class="todo">Release tags gated on them</li><li class="ok">Secret scanning, govulncheck, npm audit, UI type-check</li></ul></td><td class="tb">CI</td></tr>
+      <li class="ok">VM integration suites nightly in CI (one runner per suite)</li><li class="ok">Release tags gated on them (release.yml nightly-gate)</li><li class="ok">Secret scanning, govulncheck, npm audit, UI type-check</li></ul></td><td class="tb">CI</td></tr>
     <tr data-id="M3" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">M3</td><td><b>Windows CI</b><ul class="subs">
       <li class="ok">Build, vet, test, Pester, installer encoding</li>
       <li class="ok">Guard tests read backslash paths, and generated files are pinned to LF (21 Sep)</li>
-      <li class="todo">End-to-end WSL install test</li></ul></td><td class="tb">CI</td></tr>
+      </ul></td><td class="tb">CI; no end-to-end WSL install test yet</td></tr>
     <tr data-id="M4" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">M4</td><td><b>Releases &amp; GHCR image</b><ul class="subs">
       <li class="ok">Binaries for 5 platforms + fox-verify</li><li class="ok">SHA256SUMS merged safely between jobs</li>
-      <li class="ok">Fails unless <code>fox update</code>'s files are published</li><li class="ok">Multi-arch Postgres image on GHCR</li><li class="ok">Actions pinned by SHA; signed SHA256SUMS; build attestations; SBOM</li><li class="todo">First signed release run on GitHub</li></ul></td><td class="tb">Script tests in CI</td></tr>
+      <li class="ok">Fails unless <code>fox update</code>'s files are published</li><li class="ok">Multi-arch Postgres image on GHCR</li><li class="ok">Actions pinned by SHA; signed SHA256SUMS; build attestations; SBOM</li><li class="ok">Run for a real release on GitHub, and verified afterwards</li></ul></td><td class="tb">Script tests in CI</td></tr>
     <tr data-id="M5" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">M5</td><td><b>WSL distro &amp; ZFS builds</b><ul class="subs">
       <li class="ok">Prebuilt distro image</li><li class="ok">Downloaded and verified by the installer (seen on Windows)</li><li class="ok">Preloaded image tagged as the engine runs it</li>
-      <li class="ok">Imported on a fresh Windows install; preloaded images loaded</li><li class="ok">Published zstd-compressed, with the gzip size measured beside it in every build log</li><li class="part">zstd unpack on a real Windows install (unit-tested only); the gzip image was 685 MB</li></ul></td><td class="tb">Actions artifacts; Pester; Windows run 16 Sep</td></tr>
+      <li class="ok">Imported on a fresh Windows install; preloaded images loaded</li><li class="ok">Published zstd-compressed, with the gzip size measured beside it in every build log</li></ul></td><td class="tb">Actions artifacts; Pester; Windows run 16 Sep; the zstd unpack is unit-tested only, not run on a real Windows install</td></tr>
     <tr data-id="M6" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">M6</td><td><b>Postgres image</b><ul class="subs">
       <li class="ok">PostgreSQL 18 + wal-g for a fresh install; one image per supported major (16, 18)</li>
       <li class="ok">The image follows the data: an install on 16 keeps running 16 after an update</li>
@@ -553,13 +559,13 @@
       <li class="ok">The major lives in one place, and a test holds the Dockerfile, release matrix and Windows preload to it</li>
       <li class="ok">All three suites pass on PostgreSQL 18.6: 108 + 277 + 51 checks (21 Sep)</li>
       <li class="ok">A command that moves an install from 16 to 18 (D6), and a portable backup to take first (D5)</li>
-      <li class="todo">pgvector</li><li class="ok">Base image pinned by digest; wal-g checked by SHA-256</li></ul></td><td class="tb">Unit; all three suites on 18</td></tr>
+      <li class="next">pgvector</li><li class="ok">Base image pinned by digest; wal-g checked by SHA-256</li></ul></td><td class="tb">Unit; all three suites on 18</td></tr>
     <tr data-id="M7" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">M7</td><td><b>Product name in one file</b><ul class="subs">
       <li class="ok">brand.json → Go, shell, web and installer blocks, regenerated by <code>make brand</code></li>
       <li class="ok">Stored names brand-free and frozen: a rename never migrates an install</li>
       <li class="ok">Retired env prefixes, state directory, VM names and installs still handled</li>
       <li class="ok">Guards: retired names anywhere, product names in stored SQL, durable names spelt twice</li>
-      <li class="part">The sweep is text substitution: review its diff (it over-reached twice)</li></ul></td><td class="tb">Unit (brand, gen, oldnames), in CI via go test</td></tr>
+      <li class="lim">The sweep is text substitution: review its diff (it over-reached twice)</li></ul></td><td class="tb">Unit (brand, gen, oldnames), in CI via go test</td></tr>
   </table>
 </section>
 
@@ -569,14 +575,14 @@
   <p class="sub">Planned or discussed, nothing built yet. When work starts, move the row into its area with the next id there.</p>
   <table>
     <tr><th></th><th>ID</th><th>Item · scope</th><th>Related</th></tr>
-    <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Multi-tenant projects &amp; roles</b><ul class="subs"><li class="todo">Projects / organisations</li><li class="todo">Per-branch permissions (RBAC)</li></ul></td><td class="tb">G1, H6</td></tr>
+    <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Multi-tenant projects</b><ul class="subs"><li class="todo">Projects / organisations, and roles within them</li><li class="ok">Per-branch permissions: owner or admin, on every branch-scoped route (G2 of the audit)</li></ul></td><td class="tb">G1, H6</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Branch merge</b><ul class="subs"><li class="todo">Apply one branch's schema changes to another</li></ul></td><td class="tb">H18</td></tr>
-    <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Scheduled backups &amp; retention</b></td><td class="tb">D2</td></tr>
+    
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Automatic HA failover</b><ul class="subs"><li class="todo">Health detection, fencing</li><li class="todo">Multi-host</li></ul></td><td class="tb">D4</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Pipelines: scheduling, incremental / CDC extract, DAG view</b></td><td class="tb">J1</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>More import sources: Cassandra, DynamoDB</b></td><td class="tb">I1–I8</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>pgvector in the Postgres image</b></td><td class="tb">M6</td></tr>
-    <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Cloud write-once anchors</b> (S3 Object Lock etc.)</td><td class="tb">H10</td></tr>
+    
     <tr data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">—</td><td><b>Release signatures</b> — done 22 Sep 2026</td><td class="tb">A9, M4</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Hosted cloud tier</b></td><td class="tb">—</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Networked storage disaggregation</b> (README roadmap; see the storage engine note on page 1)</td><td class="tb">C1, D1</td></tr>

@@ -111,9 +111,21 @@ test('the Blackbox picks up a change on its own, and shows the chain', async ({ 
 // names the entry, and says main is left alone.
 test('a Blackbox entry offers to branch from before it, on main only', async ({ page }) => {
   await signIn(page)
+  // main's record can be empty on a fresh install (the suites run with the sample
+  // data off), so this makes its own change rather than relying on one being
+  // there — no test in this file depends on another having run.
+  const onMain = `e2e_rewind_${Date.now().toString().slice(-6)}`
   await page.goto('/blackbox', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(async (t) => {
+    await fetch('/api/branches/main/query', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ sql: `CREATE TABLE ${t} (id int)` }),
+    })
+  }, onMain)
   await page.locator('select').first().selectOption('main')
-  const firstChange = page.locator('tr.lg-row').first()
+  const firstChange = page.getByText(`public.${onMain}`).first()
   await expect(firstChange).toBeVisible({ timeout: 30_000 })
   await firstChange.click()
   const detail = page.locator('.lg-detail').first()
@@ -126,8 +138,17 @@ test('a Blackbox entry offers to branch from before it, on main only', async ({ 
 
   // On another branch the action is absent, and the page says why rather than
   // offering something the engine would refuse.
+  const onBranch = `e2e_rewind_b_${Date.now().toString().slice(-6)}`
+  await page.evaluate(async ([b, t]) => {
+    await fetch(`/api/branches/${b}/query`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ sql: `CREATE TABLE ${t} (id int)` }),
+    })
+  }, [branch, onBranch])
   await page.locator('select').first().selectOption(branch)
-  const other = page.locator('tr.lg-row').first()
+  const other = page.getByText(`public.${onBranch}`).first()
   await expect(other).toBeVisible({ timeout: 30_000 })
   await other.click()
   const otherDetail = page.locator('.lg-detail').first()

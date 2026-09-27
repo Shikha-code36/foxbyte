@@ -62,7 +62,7 @@ func checkCmd(args []string) {
 	}
 	lines = append(lines, checkServers()...)
 	lines = append(lines, checkPorts()...)
-	lines = append(lines, checkAPI(), checkAPIClosed(), checkBlackbox(), checkBackups(), checkSampleData())
+	lines = append(lines, checkAPI(), checkAPIClosed(), checkBlackbox(), checkBackups(), checkRestore(), checkSampleData())
 
 	failed, warned := 0, 0
 	for _, l := range lines {
@@ -232,6 +232,26 @@ func checkBackups() checkLine {
 			fmt.Sprintf("%s backup create", brand.CLI))
 	}
 	return ok("backups", fmt.Sprintf("newest %dh old (schedule: %s) in %s", h.AgeHours, h.Schedule, h.Target))
+}
+
+// Whether a restore has ever been proved to work, and when. A backup nothing has
+// restored is a hope; this is the line that says which it is.
+func checkRestore() checkLine {
+	c, ran := branch.LastRestoreCheck() // not `ok`: that is the helper below
+	if !ran {
+		return warn("restore proven", "never checked on this install",
+			fmt.Sprintf("%s backup verify", brand.CLI))
+	}
+	at, err := time.Parse(time.RFC3339, c.At)
+	age := "at an unknown time"
+	if err == nil {
+		age = fmt.Sprintf("%dh ago", int(time.Since(at).Hours()))
+	}
+	if !c.OK {
+		return fail("restore proven", fmt.Sprintf("the last check (%s) failed: %s", age, firstLine(c.Err)),
+			fmt.Sprintf("%s backup verify", brand.CLI))
+	}
+	return ok("restore proven", fmt.Sprintf("yes, %s — restored from %s in %ds", age, c.BaseBackup, c.Seconds))
 }
 
 // Not a fault — but on a fresh install an empty main is usually a seed that did

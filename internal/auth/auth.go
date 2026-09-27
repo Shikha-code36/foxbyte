@@ -511,9 +511,22 @@ func (s *Store) listAPIKeys(userID int64) ([]KeyInfo, error) {
 	return out, nil
 }
 
+// ErrNoSuchKey is returned when there is no such key for that user — because the
+// id is wrong, or because it belongs to somebody else.
+var ErrNoSuchKey = errors.New("no such API key")
+
+// revokeAPIKey deletes one of a user's keys. It reports ErrNoSuchKey when nothing
+// was deleted: revoking a key is how someone shuts a door they think is open, and
+// answering "revoked" to a typo'd id told them a door was shut that was not.
 func (s *Store) revokeAPIKey(userID int64, id string) error {
-	_, err := s.db.Exec(`DELETE FROM api_keys WHERE id=? AND user_id=?`, id, userID)
-	return err
+	res, err := s.db.Exec(`DELETE FROM api_keys WHERE id=? AND user_id=?`, id, userID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return ErrNoSuchKey
+	}
+	return nil
 }
 
 // UserByEmail looks up a user by email without a password check (CLI admin use).
