@@ -71,3 +71,66 @@ test('an API key is shown once, and the account page offers a password change', 
   await expect(page.locator('pre code').first()).toContainText(/^key_/)
   await expect(page.getByRole('heading', { name: 'Your password' })).toBeVisible()
 })
+
+// The Blackbox page now keeps itself up to date and shows how an entry is
+// chained — the two things that made "a change appears, attributed and linked"
+// true in the product rather than only in the docs.
+test('the Blackbox picks up a change on its own, and shows the chain', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/blackbox', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Blackbox' })).toBeVisible()
+  await page.locator('select').first().selectOption(branch)
+  // Live is on by default; the dot says so.
+  const liveBtn = page.getByRole('button', { name: /live|paused/i })
+  await expect(liveBtn).toHaveAttribute('aria-pressed', 'true')
+
+  // A change made elsewhere must arrive without this page being touched. The
+  // API call stands in for another tab or a psql session.
+  const live = `e2e_live_${Date.now().toString().slice(-6)}`
+  await page.evaluate(async ([b, t]) => {
+    await fetch(`/api/branches/${b}/query`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ sql: `CREATE TABLE ${t} (id int)` }),
+    })
+  }, [branch, live])
+  // No reload, no Refresh: the poll has to bring it in.
+  await expect(page.getByText(`public.${live}`).first()).toBeVisible({ timeout: 30_000 })
+
+  // Expanding it shows the hashes that link it to the entry before.
+  await page.getByText(`public.${live}`).first().click()
+  const detail = page.locator('.lg-detail').first()
+  await expect(detail.locator('.lg-chain')).toBeVisible()
+  await expect(detail.locator('.lg-chain code').first()).toHaveText(/^[0-9a-f]{12}…$/)
+  await expect(detail).toContainText('links to')
+})
+
+// Rewind is offered where the bad change is visible. Creating the branch takes
+// minutes, so the test goes as far as the confirmation — that the action exists,
+// names the entry, and says main is left alone.
+test('a Blackbox entry offers to branch from before it, on main only', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/blackbox', { waitUntil: 'domcontentloaded' })
+  await page.locator('select').first().selectOption('main')
+  const firstChange = page.locator('tr.lg-row').first()
+  await expect(firstChange).toBeVisible({ timeout: 30_000 })
+  await firstChange.click()
+  const detail = page.locator('.lg-detail').first()
+  await detail.getByRole('button', { name: /branch from before this change/i }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText(/just before entry #\d+/)
+  await expect(dialog).toContainText(/main.*is not modified/i)
+  await dialog.getByRole('button', { name: /cancel/i }).click()
+  await expect(dialog).toBeHidden()
+
+  // On another branch the action is absent, and the page says why rather than
+  // offering something the engine would refuse.
+  await page.locator('select').first().selectOption(branch)
+  const other = page.locator('tr.lg-row').first()
+  await expect(other).toBeVisible({ timeout: 30_000 })
+  await other.click()
+  const otherDetail = page.locator('.lg-detail').first()
+  await expect(otherDetail.getByRole('button', { name: /branch from before this change/i })).toHaveCount(0)
+  await expect(otherDetail).toContainText(/only branch that archives WAL/i)
+})

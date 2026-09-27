@@ -507,12 +507,20 @@ func ledgerSQL(q url.Values) string {
 	if n, err := strconv.Atoi(q.Get("offset")); err == nil && n > 0 {
 		offset = n
 	}
-	// Extra columns are opt-in (with=session), so the default response keeps
+	// Extra columns are opt-in (with=session,chain), so the default response keeps
 	// exactly the columns clients were built against.
+	//
+	// with=chain adds the entry's id and the two hashes that chain it to the one
+	// before. Without them the console could show that a record existed but not
+	// that it was linked, which is the whole claim — and it could not offer to
+	// branch from before an entry, because it never knew an entry's id.
 	extra := ""
 	for _, w := range strings.Split(q.Get("with"), ",") {
-		if strings.TrimSpace(w) == "session" {
-			extra = ", session"
+		switch strings.TrimSpace(w) {
+		case "session":
+			extra += ", session"
+		case "chain":
+			extra += ", id, prev_hash, row_hash"
 		}
 	}
 	return fmt.Sprintf(`SELECT to_char(at,'YYYY-MM-DD HH24:MI:SS') AS at, actor, actor_kind, tool,

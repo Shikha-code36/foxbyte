@@ -108,6 +108,25 @@ recorded actor is the login identity: a client cannot forge who made a change,
 even by `SET`-ting a session variable. There is a **Blackbox** page in the web
 console too.
 
+**Undo a change you should not have made.** Because every entry carries the
+transaction that made it, and `main` archives its write-ahead log, the record is
+not only evidence — it is a way back. Point at an entry and get a **new branch
+holding `main` exactly as it was just before that change**, with `main` left
+alone:
+
+```bash
+fox blackbox entries            # the newest entries with their ids
+fox blackbox branch-before 42   # a branch of main as it was just before entry 42
+fox blackbox branch-before 42 --as before-the-drop   # …under a name you choose
+```
+
+It restores a base backup and replays WAL, so it takes a few minutes and needs a
+base backup taken before the change. Inspect the new branch, copy what you need
+back, and throw it away — or point your application at it. The same action is on
+every row of the **Blackbox** page in the console, and at
+`POST /api/branches/main/ledger/{id}/branch`. `main` is the only branch this
+works from: it is the only one that archives WAL.
+
 Beside it, a **security log** records what happens at the doors — sign-ins and
 failed ones, sign-ups, API keys made and revoked, password changes, deleted
 accounts, admin grants and every refused request — chained and anchored the
