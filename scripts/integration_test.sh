@@ -534,6 +534,65 @@ assert_eq "going back to the local store works" "$($S backup target local 2>&1 |
 assert_eq "…and main archives there again" "$($S backup target | grep -c 'local object store')" "1"
 sudo docker rm -f "$RS" >/dev/null 2>&1
 
+echo "### 11d. the first run: sample data, check, connect (onboarding batch 1)"
+# The suites run with FOX_NO_DEMO=1 (scripts/lib/test_guard.sh), so the seed is
+# exercised here, deliberately, on a branch of its own.
+$S branch delete demoseed >/dev/null 2>&1
+$S branch create demoseed >/dev/null 2>&1
+# Not "the branch is empty": it is a clone of main, which earlier sections wrote
+# to. What matters is that the sample tables are not there until the seed runs.
+assert_eq "a fresh branch has no sample tables" \
+  "$(pg pg-demoseed "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('users','projects','events')")" "0"
+$S demo seed demoseed >/tmp/demoseed.log 2>&1
+assert_eq "fox demo seed creates the three sample tables" \
+  "$(pg pg-demoseed "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('users','projects','events')")" "3"
+assert_eq "…with five rows each" \
+  "$(pg pg-demoseed 'SELECT (SELECT count(*) FROM users)::text || (SELECT count(*) FROM projects)::text || (SELECT count(*) FROM events)::text')" "555"
+assert_eq "…and a foreign key between them" \
+  "$(pg pg-demoseed "SELECT count(*) FROM information_schema.table_constraints WHERE table_schema='public' AND constraint_type='FOREIGN KEY' AND table_name IN ('projects','events')")" "2"
+# The sequences must be past the seeded ids, or a user's first insert collides.
+assert_eq "…the sequences are past the sample rows" \
+  "$(pg pg-demoseed "WITH i AS (INSERT INTO users (email, name) VALUES ('new@example.com','New') RETURNING id) SELECT id FROM i")" "6"
+assert_eq "the sample schema is recorded in the Blackbox" \
+  "$($S blackbox demoseed 2>/dev/null | grep -c 'CREATE TABLE' | awk '{print ($1>=3)}')" "1"
+# Running it again must change nothing: it runs on every first start.
+$S demo seed demoseed >/dev/null 2>&1
+assert_eq "seeding twice changes nothing" \
+  "$?|$(pg pg-demoseed 'SELECT count(*) FROM projects')" "0|5"
+assert_eq "fox demo sql prints the SQL without running it" "$($S demo sql | grep -c 'CREATE TABLE IF NOT EXISTS users')" "1"
+$S demo drop demoseed >/dev/null 2>&1
+assert_eq "fox demo drop removes them again" \
+  "$(pg pg-demoseed "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('users','projects','events')")" "0"
+
+# fox connect --dsn prints a line a person can paste, and no key of its own.
+CONN="$($S connect demoseed --dsn 2>&1)"
+assert_eq "fox connect prints the gateway DSN for the branch" \
+  "$(echo "$CONN" | grep -c 'postgresql://dbadmin:<API_KEY>@localhost:6432/demoseed?sslmode=require')" "1"
+assert_eq "…and says where the password comes from, without minting one" \
+  "$(echo "$CONN" | grep -c 'apikey create')|$(echo "$CONN" | grep -c "${DB_KEY_PREFIX}")" "1|0"
+assert_eq "fox branch create ends with a connection string and a time" \
+  "$($S branch create democonn 2>&1 | grep -c 'is ready in')" "1"
+$S branch delete democonn >/dev/null 2>&1
+
+# fox check is the install diagnosing itself: with the stack up it passes.
+CHECK="$($S check 2>&1)"; CHECK_RC=$?
+assert_eq "fox check exits 0 on a working install" "$CHECK_RC" "0"
+assert_eq "…and reports main, the servers, the ports and the Blackbox" \
+  "$(echo "$CHECK" | grep -c '^ok  ' | awk '{print ($1>=8)}')|$(echo "$CHECK" | grep -c 'FAIL')" "1|0"
+# A check that the API refuses an unauthenticated caller: a 401 is the install
+# working, and check says so rather than calling it a fault.
+assert_eq "…including that the API refuses a caller with no key" \
+  "$(echo "$CHECK" | grep -c 'API is closed')" "1"
+# With a server stopped it must say which one, and fail.
+$S logs gateway >/dev/null 2>&1
+sudo pkill -f "fox gateway" >/dev/null 2>&1; sleep 2
+CHECK="$($S check 2>&1)"; CHECK_RC=$?
+assert_eq "a stopped gateway makes fox check fail and name it" \
+  "$CHECK_RC|$(echo "$CHECK" | grep -c 'FAIL  gateway')" "1|1"
+$S start >/dev/null 2>&1; sleep 3
+assert_eq "…and it passes again once the stack is back" "$($S check >/dev/null 2>&1; echo $?)" "0"
+$S branch delete demoseed >/dev/null 2>&1
+
 echo "### 12. fox uninstall (B1)"
 # Removal used to be a list of commands to run by hand. This runs last: it takes
 # the stack apart, so nothing after it has a stack to use.

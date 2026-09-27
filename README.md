@@ -206,17 +206,25 @@ fallen behind their tags.
 
 ## Quickstart
 
-After `fox setup` (macOS/Windows) or `fox start` (Linux), open
-<https://localhost:8080> and create your account with the **setup token** the
-command printed (`fox setup-token` shows it again; `fox user create <email>`
-works too). The first account on an install can override the
-destructive-change guardrail, which is why it needs the token. Then make an API key on the API
-keys page (or `fox apikey create <email> <name>`; it is shown once) and use it
-as the password in the connection string below. Then:
+After `fox setup` (macOS/Windows) or `fox start` (Linux), **the console opens by
+itself** at <https://localhost:8080>, with the one-time **setup token** already
+in the link — choose an email and a password and you are in. (`fox setup-token`
+prints the token if you need it; `fox user create <email>` works too, and
+`FOX_NO_BROWSER=1` leaves the browser alone.) The first account on an install can
+override the destructive-change guardrail, which is why it needs the token.
+
+`main` already has three small sample tables — `users`, `projects` and `events`,
+with five rows each — so there is something to query, alter and branch straight
+away. `FOX_NO_DEMO=1` starts empty; `fox demo drop` removes them later.
+
+Then make an API key on the API keys page (or `fox apikey create <email> <name>`;
+it is shown once) and use it as the password in the connection string below:
 
 ```bash
+fox check                        # is this install healthy? each failure says what to run
 fox status                       # servers, primary readiness, branches
-fox branch create qa             # instant copy-on-write branch of main
+fox branch create qa             # copy-on-write branch of main; prints its connection string
+fox connect qa                   # that string again, then a psql shell on the branch
 ```
 
 Connect any Postgres client through the gateway — the **database name is the

@@ -102,13 +102,24 @@ fox setup`}</Code>
       <p>Nothing is started with a key of its own: create your account at <code>https://localhost:8080</code>{' '}
         (the first account on an install becomes the admin of <code>main</code>), then make a key on the{' '}
         <a href="/keys">API keys</a> page — or with <code>fox apikey create &lt;email&gt; &lt;name&gt;</code> — and use it as
-        the password everywhere below.</p>
+        the password everywhere below. <code>fox start</code> opens this console for you on a first run, with the
+        one-time setup token already in the link; <code>FOX_NO_BROWSER=1</code> if you would rather it did not.</p>
+
+      <p><code>main</code> starts with three small sample tables — <code>users</code>, <code>projects</code> and{' '}
+        <code>events</code>, five rows each — so the SQL console and the Blackbox have something in them from the
+        first minute. <code>fox demo seed &lt;branch&gt;</code> puts them on another branch,{' '}
+        <code>fox demo drop</code> removes them, and <code>FOX_NO_DEMO=1</code> starts empty.</p>
+
+      <p>If something is not working, ask the install itself rather than guessing — every failing line says which
+        command fixes it:</p>
+      <Code>{`fox check`}</Code>
 
       <h2>2 · Create a branch &amp; your schema</h2>
       <p>Work on <code>main</code>, or make an instant isolated branch. Either is a normal Postgres
         database — use plain SQL or your migration tool.</p>
-      <Code>{`fox branch create dev          # instant copy-on-write branch of main
-fox branch list                # branches + their copy-on-write size`}</Code>
+      <Code>{`fox branch create dev          # copy-on-write branch of main; prints its connection string
+fox branch list                # branches + their copy-on-write size
+fox connect dev                # that connection string again, then a psql shell on the branch`}</Code>
       <Code>{`psql "postgres://dbadmin:<API_KEY>@localhost:6432/dev?sslmode=require"
 
 CREATE TABLE notes (
@@ -198,6 +209,9 @@ curl -H "Authorization: Bearer $FOX_KEY" -X DELETE https://localhost:8088/agents
         <thead><tr><th>Task</th><th>Command / value</th></tr></thead>
         <tbody>
           <tr><td>Start / stop everything</td><td><code>fox start</code> · <code>fox stop</code></td></tr>
+          <tr><td>Is this install healthy?</td><td><code>fox check</code></td></tr>
+          <tr><td>Reach a branch (string, then psql)</td><td><code>fox connect &lt;branch&gt;</code></td></tr>
+          <tr><td>Sample tables</td><td><code>fox demo seed|drop &lt;branch&gt;</code></td></tr>
           <tr><td>Connection string</td><td><code>postgres://dbadmin:&lt;API_KEY&gt;@localhost:6432/&lt;branch&gt;?sslmode=require</code></td></tr>
           <tr><td>Create / list / delete a branch</td><td><code>fox branch create|list|delete &lt;name&gt;</code></td></tr>
           <tr><td>Time-travel (PITR)</td><td><code>fox backup create</code> · <code>fox restore --to latest</code></td></tr>

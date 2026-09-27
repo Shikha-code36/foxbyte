@@ -174,7 +174,14 @@ func startContainer(name string, primary bool) error {
 			"-c", "listen_addresses=*",
 		)
 	}
-	return run("docker", args...)
+	// `docker run -d` answers with the container id, which was the last thing
+	// `fox branch create` printed — a 64-character hash where a person wanted the
+	// branch's name and how to reach it. The id is kept for a failure, where it is
+	// the only clue.
+	if out, err := captureCombined("docker", args...); err != nil {
+		return fmt.Errorf("starting the container for %q: %w\n%s", name, err, strings.TrimSpace(out))
+	}
+	return nil
 }
 
 func waitReady(name string) error {
@@ -669,6 +676,9 @@ func Up() error {
 	if err := Init(); err != nil {
 		return err
 	}
+	// Before the first backup, so the sample data is inside it and a restore to
+	// the install's first minutes still has something to show.
+	ensureDemoData()
 	ensureFirstBackup()
 	return nil
 }

@@ -80,6 +80,20 @@ func guestBin(name string) string {
 
 func forward(args []string) error { return forwardStdin(args, os.Stdin) }
 
+// forwardCapture runs a command in the guest and returns its stdout instead of
+// printing it, for the host asking the engine a question — the setup token to put
+// in the console URL, for one. Errors carry no output: the caller decides whether
+// not knowing matters.
+func forwardCapture(args []string) (string, error) {
+	name := instance()
+	if !instanceExists(name) || !instanceRunning(name) {
+		return "", fmt.Errorf("the %s VM is not running", brand.Product)
+	}
+	full := append([]string{"shell", name, "--", "env", envInGuest + "=1", guestBin(name)}, args...)
+	out, err := exec.Command("limactl", full...).Output()
+	return strings.TrimSpace(string(out)), err
+}
+
 func forwardStdin(args []string, stdin io.Reader) error {
 	if _, err := exec.LookPath("limactl"); err != nil {
 		return fmt.Errorf("Lima is required on macOS. Install it with `brew install lima`, then run `fox setup`")
@@ -150,7 +164,13 @@ func setupDarwin() error {
 		return err
 	}
 	fmt.Println("Bringing the stack up…")
-	return forward([]string{"start"})
+	if err := forward([]string{"start"}); err != nil {
+		return err
+	}
+	// setup calls the engine's start directly rather than through Maybe, so the
+	// open-the-console step on `fox start` has not run.
+	openConsoleAfterStart()
+	return nil
 }
 
 // provisionGuest installs Docker + ZFS in the VM. The engine binary is installed
