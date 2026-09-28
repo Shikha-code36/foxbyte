@@ -101,7 +101,20 @@ for pair in "minio:$minio_tag" "mc:$mc_tag"; do
 	echo "  pushed ${dest}-arm64"
 done
 
+# `docker manifest`, not `docker buildx imagetools`: the engine VM runs Ubuntu's
+# docker.io, which has no buildx. manifest is part of the CLI itself and does the
+# one thing needed here — join two published images into an index.
+export DOCKER_CLI_EXPERIMENTAL=enabled
+
+# The digest a tag resolves to now, before anything overwrites it.
+digest_of() { docker manifest inspect --verbose "$1" 2>/dev/null |
+	python3 -c 'import sys,json
+d=json.load(sys.stdin)
+d=d[0] if isinstance(d,list) else d
+print(d["Descriptor"]["digest"])' 2>/dev/null; }
+
 echo "=== amd64 ==="
+declare -A amd64_ref
 if [ -n "$amd64_tar" ]; then
 	docker load -i "$amd64_tar" >/dev/null
 	for pair in "minio:$minio_tag" "mc:$mc_tag"; do
@@ -113,21 +126,36 @@ if [ -n "$amd64_tar" ]; then
 		done
 		[ -n "$id" ] || { echo "the tar holds no amd64 copy of /$name" >&2; exit 1; }
 		push_arch "$id" "$dest" amd64 >/dev/null
+		amd64_ref["$dest"]="${dest}-amd64"
 		echo "  pushed ${dest}-amd64"
 	done
 else
-	# What the workflow already pushed under the plain tag is the amd64 build.
+	# What was pushed under the plain tag is the amd64 build. It is referenced by
+	# digest, so replacing the tag with the index below cannot lose it.
 	for dest in "$minio_tag" "$mc_tag"; do
-		docker buildx imagetools create -t "${dest}-amd64" "$dest" >/dev/null
-		echo "  copied ${dest}-amd64 from what is already published"
+		d="$(digest_of "$dest")"
+		[ -n "$d" ] || { echo "cannot read the published digest of $dest — is it there?" >&2; exit 1; }
+		amd64_ref["$dest"]="${dest%%:*}@${d}"
+		echo "  using the published amd64 image ${amd64_ref[$dest]}"
 	done
 fi
 
 echo "=== combine into one multi-architecture tag ==="
 for dest in "$minio_tag" "$mc_tag"; do
-	docker buildx imagetools create -t "$dest" "${dest}-amd64" "${dest}-arm64" >/dev/null
-	digest="$(docker buildx imagetools inspect "$dest" --format '{{.Manifest.Digest}}' | tail -n1 | tr -d '[:space:]')"
-	platforms="$(docker buildx imagetools inspect "$dest" --raw | python3 -c 'import sys,json;d=json.load(sys.stdin);print(", ".join(m["platform"]["os"]+"/"+m["platform"]["architecture"] for m in d.get("manifests",[])) or "single platform")')"
+	# A stale local manifest list would be amended rather than replaced.
+	docker manifest rm "$dest" >/dev/null 2>&1 || true
+	docker manifest create "$dest" "${amd64_ref[$dest]}" "${dest}-arm64" >/dev/null
+	# The push prints the index's own digest. `manifest inspect --verbose` on a list
+	# reports the first child's instead, which is not what gets pinned.
+	digest="$(docker manifest push "$dest" | tail -n1 | tr -d '[:space:]')"
+	case "$digest" in
+		sha256:????????????????????????????????????????????????????????????????) ;;
+		*) echo "pushing $dest gave \"$digest\", which is not a digest" >&2; exit 1 ;;
+	esac
+	raw="$(docker manifest inspect "$dest")"
+	platforms="$(printf '%s' "$raw" | python3 -c 'import sys,json
+d=json.load(sys.stdin)
+print(", ".join(m["platform"]["os"]+"/"+m["platform"]["architecture"] for m in d.get("manifests",[])) or "single platform")')"
 	printf '%s\n  %s\n  platforms: %s\n' "$dest" "$digest" "$platforms"
 done
 
