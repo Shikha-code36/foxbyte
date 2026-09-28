@@ -117,6 +117,9 @@ func standbyRunArgs(dataPath string) []string {
 		"-e", "PGDATA=/var/lib/postgresql/data/pgdata",
 		"-v", dataPath + ":/var/lib/postgresql/data",
 	}
+	// The standby streams from the primary and archives WAL after a failover, so
+	// it is long-lived and must come back on its own like main (see restartPolicy).
+	args = append(args, restartPolicy...)
 	args = append(args, walgEnv()...)
 	args = append(args, "-e", "WALG_COMPRESSION_METHOD=lz4")
 	return append(args, pgImage(), "postgres",

@@ -45,6 +45,8 @@ var hints = []hint{
 		"That password isn't right for this branch. Through the gateway on :6432 the password is an API key, not your account password.\nMint one with: %s apikey create <email> <name>   (it is shown once)"},
 	{regexp.MustCompile(`(?i)connection refused|could not reach branch|no such host|could not connect to server`),
 		"Nothing answered there. The stack may be down, or the branch suspended.\nCheck it with: %s check"},
+	{regexp.MustCompile(`(?i)did not finish within .* and was stopped`),
+		"That command was still running when its deadline passed, so it was stopped — usually a Docker daemon or an object store that stopped answering.\nCheck what the engine can see: %s check"},
 	{regexp.MustCompile(`(?i)canceling statement due to statement timeout|context deadline exceeded|timed out after`),
 		"The statement ran longer than its time limit and was cancelled — nothing was left half-applied.\nFor a long migration, run it through psql instead: %s connect <branch>"},
 	{regexp.MustCompile(`(?i)cannot insert multiple commands into a prepared statement`),

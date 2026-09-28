@@ -82,6 +82,9 @@ func Serve(addr string) error {
 	branch.StartCheckpointer()
 	// Base backups on a schedule, pruned to a retention (audit v2 G19).
 	branch.StartBackupScheduler()
+	// And proof that they restore: a backup nothing has ever restored is a hope,
+	// not a backup.
+	branch.StartRestoreVerifier()
 
 	handler := httpx.CORS(store.WebOrigin())(logging(httpx.LimitBodies(httpx.MaxBody, isUpload)(mux)))
 

@@ -22,6 +22,7 @@ func TestForKnownFailures(t *testing.T) {
 		{`pq: password authentication failed for user "dbadmin"`, "apikey create"},
 		{"dial tcp 127.0.0.1:6432: connect: connection refused", "fox check"},
 		{"ERROR:  canceling statement due to statement timeout", "fox connect"},
+		{"docker did not finish within 10m0s and was stopped (set FOX_EXEC_TIMEOUT to change that)", "fox check"},
 		{"ERROR: cannot insert multiple commands into a prepared statement", "one statement per call"},
 		{"write /var/lib/postgresql/data: no space left on device", "backup prune"},
 		{"guardrail: TRUNCATE is blocked by policy", "fox policy list"},
