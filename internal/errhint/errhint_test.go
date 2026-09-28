@@ -26,6 +26,7 @@ func TestForKnownFailures(t *testing.T) {
 		{"ERROR: cannot insert multiple commands into a prepared statement", "one statement per call"},
 		{"write /var/lib/postgresql/data: no space left on device", "backup prune"},
 		{"guardrail: TRUNCATE is blocked by policy", "fox policy list"},
+		{`docker: Error response from daemon: unknown: failed to resolve reference "quay.io/minio/minio@sha256:14cea": unexpected status from HEAD request: 401 Unauthorized`, "FOX_MINIO_IMAGE"},
 	}
 	for _, c := range cases {
 		got := ForText(c.msg)

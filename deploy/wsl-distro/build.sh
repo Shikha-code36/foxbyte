@@ -103,13 +103,22 @@ prepare_images() {
 	# Saved to $work, not into $root: this runs before the rootfs necessarily
 	# exists. The repackage step moves it in.
 	#
-	# MinIO no longer publishes to Docker Hub, so its images come from quay.io,
-	# pinned to the releases the engine runs (internal/branch/images.go; a unit
-	# test keeps these names in step with it).
-	# Pulled by digest (checked by docker), saved under the tag: `docker load`
-	# keeps no registry digest, and the engine runs a preloaded tag as is.
-	local minio_image="quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
-	local mc_image="quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
+	# The object store's images, read out of the engine rather than repeated here:
+	# they have moved registry twice (off Docker Hub, then behind authentication on
+	# quay.io) and are now mirrored to FoxByte's own — internal/branch/images.go is
+	# the one place that says which, and a unit test holds this to it.
+	#
+	# Pulled by digest when one is pinned (docker checks it), saved under the tag:
+	# `docker load` keeps no registry digest, and the engine runs a preloaded tag as
+	# is (images.go pickImage).
+	local images_go="$repo/internal/branch/images.go"
+	go_const() { sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$images_go" | head -1; }
+	local minio_tag mc_tag minio_digest mc_digest minio_image mc_image
+	minio_tag="$(go_const MinioTag)"; mc_tag="$(go_const MCTag)"
+	minio_digest="$(go_const MinioDigest)"; mc_digest="$(go_const MCDigest)"
+	[ -n "$minio_tag" ] && [ -n "$mc_tag" ] || { echo "could not read the object-store image names from $images_go" >&2; return 1; }
+	minio_image="$minio_tag${minio_digest:+@$minio_digest}"
+	mc_image="$mc_tag${mc_digest:+@$mc_digest}"
 	# Tagged with the name a fresh install runs (internal/branch/images.go
 	# PostgresImageFor(PGMajor); a unit test keeps it in step): a preload under
 	# any other name is ignored, and `fox setup` pulls or builds the image anyway

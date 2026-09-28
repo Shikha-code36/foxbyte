@@ -658,6 +658,37 @@ assert_eq "revoking an unknown API key id is refused" \
 assert_eq "…and over the API it is a 404" \
   "$(curl -sk -o /dev/null -w '%{http_code}' -X DELETE -H "$AUTH" https://localhost:8080/api/keys/no-such-key)" "404"
 
+echo "### 11f. versioned API paths and pgvector (onboarding batch 5)"
+# /api/v1/… reaches the same handlers as /api/…: new code can pin a version, and
+# everything written against the unversioned paths keeps working (audit v2 G35).
+for p in status branches backups; do
+  assert_eq "GET /api/v1/$p answers as /api/$p does" \
+    "$(curl -sk -o /dev/null -w '%{http_code}' -H "$AUTH" "https://localhost:8080/api/v1/$p")|$(curl -sk -o /dev/null -w '%{http_code}' -H "$AUTH" "https://localhost:8080/api/$p")" "200|200"
+done
+assert_eq "…and the bodies are the same" \
+  "$(curl -sk -H "$AUTH" https://localhost:8080/api/v1/status | md5sum | cut -c1-32)" \
+  "$(curl -sk -H "$AUTH" https://localhost:8080/api/status | md5sum | cut -c1-32)"
+assert_eq "a branch path works versioned too" \
+  "$(curl -sk -o /dev/null -w '%{http_code}' -H "$AUTH" https://localhost:8080/api/v1/branches/main/ledger/verify)" "200"
+assert_eq "…and so does the Blackbox alias inside it" \
+  "$(curl -sk -o /dev/null -w '%{http_code}' -H "$AUTH" https://localhost:8080/api/v1/branches/main/blackbox/verify)" "200"
+assert_eq "an unauthenticated versioned call is still refused" \
+  "$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8080/api/v1/branches)" "401"
+assert_eq "the bare version says where to go" \
+  "$(curl -sk -o /dev/null -w '%{http_code}' -H "$AUTH" https://localhost:8080/api/v1)" "307"
+assert_eq "an unknown versioned path is a 404, not a redirect loop" \
+  "$(curl -sk -o /dev/null -w '%{http_code}' -H "$AUTH" https://localhost:8080/api/v1/nonsense)" "404"
+
+# pgvector is in the image, so an agent that needs embeddings does not have to
+# leave the database it was given (audit v2 G34). Nothing is enabled until asked.
+assert_eq "pgvector is available but not enabled" \
+  "$(pg pg-main "SELECT count(*) FROM pg_available_extensions WHERE name='vector'")|$(pg pg-main "SELECT count(*) FROM pg_extension WHERE extname='vector'")" "1|0"
+assert_eq "…and CREATE EXTENSION vector works" \
+  "$(pg pg-main 'CREATE EXTENSION IF NOT EXISTS vector' >/dev/null 2>&1; pg pg-main "SELECT count(*) FROM pg_extension WHERE extname='vector'")" "1"
+assert_eq "…with a vector column and a distance query" \
+  "$(pg pg-main "CREATE TABLE IF NOT EXISTS vtest(id int, e vector(3)); INSERT INTO vtest VALUES (1,'[1,0,0]'),(2,'[0,1,0]')" >/dev/null 2>&1; pg pg-main "SELECT id FROM vtest ORDER BY e <-> '[1,0,0]' LIMIT 1")" "1"
+pg pg-main "SET bb.allow_destructive=on; DROP TABLE IF EXISTS vtest" >/dev/null 2>&1
+
 echo "### 12. fox uninstall (B1)"
 # Removal used to be a list of commands to run by hand. This runs last: it takes
 # the stack apart, so nothing after it has a stack to use.

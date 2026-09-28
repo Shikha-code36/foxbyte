@@ -27,6 +27,12 @@
 -- TRUNCATE joins DROP TABLE and DROP SCHEMA as blocked by default. An install
 -- whose policy already lists it keeps its choice.
 INSERT INTO bb.policy(op, action) VALUES ('TRUNCATE', 'block') ON CONFLICT (op) DO NOTHING;
+-- An agent's DELETE or UPDATE with no WHERE at all: the ordinary way a table is
+-- emptied by accident. Recording it was not enough — "an agent cannot silently
+-- wipe your rows" is only true if something refuses. Blocked for agents by
+-- default, and for agents only: a person doing it meant to, and a migration
+-- legitimately rewrites every row.
+INSERT INTO bb.policy(op, action) VALUES ('UNQUALIFIED DML', 'block') ON CONFLICT (op) DO NOTHING;
 
 -- Is the guardrail on? Imports and pipelines switch it off for their own load
 -- by disabling bb_guard_start; TRUNCATE follows the same switch.
@@ -77,6 +83,57 @@ BEGIN
 END;
 $$;
 
+-- Does this statement carry a WHERE at all? Deliberately generous: any WHERE
+-- anywhere in the statement text counts, including one inside a subquery, so the
+-- guard only ever refuses a statement that plainly has no condition. It errs
+-- towards letting work through, because the cost of a false refusal is a person
+-- unable to do their job, and the cost of a false allow is an entry in the record
+-- that says what happened.
+CREATE OR REPLACE FUNCTION bb._has_condition(q text) RETURNS boolean
+LANGUAGE sql IMMUTABLE AS $$ SELECT coalesce(q, '') ~* '\mwhere\M' $$;
+
+CREATE OR REPLACE FUNCTION bb.guard_dml() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, bb AS $$
+DECLARE act text; allow text; c record; obj text; q text;
+BEGIN
+  SELECT * INTO c FROM bb._ctx();
+  -- Agents only. A human's unqualified DELETE is their own decision, and this
+  -- guard is about a tool acting on its own.
+  IF c.actor_kind IS DISTINCT FROM 'agent' THEN
+    RETURN NULL;
+  END IF;
+  q := current_query();
+  IF bb._has_condition(q) THEN
+    RETURN NULL;
+  END IF;
+  SELECT action INTO act FROM bb.policy WHERE op = 'UNQUALIFIED DML';
+  IF act IS DISTINCT FROM 'block' OR NOT bb._guard_on() THEN
+    RETURN NULL;   -- warn and allow are handled by the record, as everywhere else
+  END IF;
+  allow := coalesce(nullif(current_setting('bb.allow_destructive', true), ''), 'off');
+  IF allow IN ('on','true','1') AND bb._may_override() THEN
+    RETURN NULL;
+  END IF;
+  obj := bb._table_identity(TG_TABLE_SCHEMA, TG_TABLE_NAME);
+  -- Recorded through a second connection, so the record survives the rollback the
+  -- refusal causes (as bb.guard_truncate does).
+  IF bb._holds_chain_lock() THEN
+    RAISE WARNING 'guardrail: this blocked attempt is not recorded in Blackbox, because this transaction has already written to it';
+  ELSE
+    PERFORM dblink_exec(
+      'host=/var/run/postgresql dbname=' || current_database() || ' user=' || current_user,
+      format($f$INSERT INTO bb.schema_ledger
+              (actor,actor_kind,tool,session,branch,command_tag,object_type,object_identity,statement,status,risk)
+              VALUES (%L,%L,%L,%L,%L,%L,'table',%L,%L,'BLOCKED','unqualified')$f$,
+        c.actor, c.actor_kind, c.tool, c.session, c.branch, TG_OP, obj, q));
+  END IF;
+  RAISE EXCEPTION 'guardrail: % with no WHERE is blocked for agents by policy (set bb.allow_destructive=on to override)', TG_OP
+    USING ERRCODE = 'insufficient_privilege',
+          HINT = 'Add a WHERE. To let one through, an admin sets bb.allow_destructive=on for the session (fox admin grant <email> gives that right).';
+  RETURN NULL;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION bb.record_dml() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, bb AS $$
 DECLARE c record;
@@ -104,6 +161,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = rel AND tgfoid = 'bb.record_dml()'::regprocedure) THEN
     EXECUTE format('CREATE TRIGGER bb_record_dml AFTER UPDATE OR DELETE ON %s FOR EACH STATEMENT EXECUTE FUNCTION bb.record_dml()', rel);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = rel AND tgfoid = 'bb.guard_dml()'::regprocedure) THEN
+    EXECUTE format('CREATE TRIGGER bb_guard_dml BEFORE UPDATE OR DELETE ON %s FOR EACH STATEMENT EXECUTE FUNCTION bb.guard_dml()', rel);
   END IF;
 END;
 $$;
@@ -145,8 +205,9 @@ BEGIN
     IF r.command_tag IN ('ALTER TABLE','ALTER TRIGGER') AND NOT bb._override_in_force() THEN
       SELECT string_agg(t.tgname || ' on ' || t.tgrelid::regclass::text, ', ') INTO bad
       FROM pg_trigger t
-      WHERE t.tgfoid IN ('bb.guard_truncate()'::regprocedure, 'bb.record_dml()'::regprocedure)
-        AND (t.tgenabled = 'D' OR t.tgname NOT IN ('bb_guard_truncate','bb_record_dml'))
+      WHERE t.tgfoid IN ('bb.guard_truncate()'::regprocedure, 'bb.record_dml()'::regprocedure,
+                         'bb.guard_dml()'::regprocedure)
+        AND (t.tgenabled = 'D' OR t.tgname NOT IN ('bb_guard_truncate','bb_record_dml','bb_guard_dml'))
         AND t.tgrelid = CASE WHEN r.object_type = 'table' THEN r.objid
                              ELSE (SELECT tgrelid FROM pg_trigger WHERE oid = r.objid) END;
       IF bad IS NOT NULL THEN
@@ -166,7 +227,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, bb AS $$
 DECLARE r record;
 BEGIN
   FOR r IN SELECT * FROM pg_event_trigger_dropped_objects() WHERE original AND object_type = 'trigger' LOOP
-    IF r.object_identity ~ '^bb_(guard_truncate|record_dml) on ' AND NOT bb._override_in_force() THEN
+    IF r.object_identity ~ '^bb_(guard_truncate|record_dml|guard_dml) on ' AND NOT bb._override_in_force() THEN
       RAISE EXCEPTION 'guardrail: the Blackbox''s data-change trigger % cannot be dropped', r.object_identity
         USING ERRCODE = 'insufficient_privilege',
               HINT = 'Only superusers and members of db_admin may, with bb.allow_destructive=on.';

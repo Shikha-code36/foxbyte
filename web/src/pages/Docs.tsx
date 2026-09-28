@@ -46,6 +46,8 @@ export default function Docs() {
       </table>
 
       <h2>REST API</h2>
+      <p className="muted">Every path below is also served under <code>/api/v1/…</code> — the same routes, so new code can
+        pin a version while anything written against <code>/api/…</code> keeps working.</p>
       <p className="muted">The control-plane API (default <code>https://localhost:8080</code>). Calls require a session
         cookie or <code>Authorization: Bearer &lt;api-key&gt;</code>. The full description is served at{' '}
         <code>GET /api/openapi.yaml</code> — point a client generator at it. Try the live ones:</p>
@@ -103,6 +105,7 @@ export default function Docs() {
         <thead><tr><th>Variable</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td><code>FOX_SIGNUP</code></td><td><code>closed</code> (default) or <code>open</code> — allow browser self-signup after the first account (which always needs the setup token)</td></tr>
+          <tr><td><code>FOX_MINIO_IMAGE</code> · <code>FOX_MC_IMAGE</code></td><td>Run the object store from a copy of your own, instead of the mirrored images in <code>ghcr.io/thefoxbyte</code></td></tr>
           <tr><td><code>FOX_NO_DEMO</code></td><td><code>1</code> to start with an empty <code>main</code>, instead of the three sample tables</td></tr>
           <tr><td><code>FOX_NO_BROWSER</code></td><td><code>1</code> to stop <code>fox start</code> opening this console</td></tr>
           <tr><td><code>FOX_CONSOLE_URL</code></td><td>Where the console is, when the ports are not the defaults (default <code>https://localhost:8080</code>)</td></tr>

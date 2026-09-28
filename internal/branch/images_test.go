@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/thefoxbyte/foxbyte/internal/brand"
 )
 
 func TestPickImage(t *testing.T) {
@@ -38,36 +40,71 @@ func TestPickImage(t *testing.T) {
 	}
 }
 
-func TestMinioImagesArePinnedOffDockerHub(t *testing.T) {
-	for _, ref := range []string{MinioImage, MCImage} {
-		if !strings.HasPrefix(ref, "quay.io/minio/") {
-			t.Errorf("%s: MinIO images are no longer on Docker Hub; use quay.io/minio", ref)
+// The object store's images come from FoxByte's own registry. Docker Hub dropped
+// them, and quay.io stopped answering anonymous pulls — a fresh install on macOS or
+// Linux could not start, because the engine needs MinIO for the WAL archive and
+// base backups. Anything outside ghcr.io/thefoxbyte is a dependency on a registry
+// that has already failed twice.
+func TestObjectStoreImagesComeFromOurRegistry(t *testing.T) {
+	for _, ref := range []string{MinioTag, MCTag} {
+		if !strings.HasPrefix(ref, brand.ImageRepo+"/") {
+			t.Errorf("%s: mirror it to %s (.github/workflows/mirror-images.yml) rather than pulling from someone else's registry",
+				ref, brand.ImageRepo)
 		}
 		if strings.HasSuffix(ref, ":latest") || !strings.Contains(ref, ":RELEASE.") {
-			t.Errorf("%s: pin a tested RELEASE tag, not latest", ref)
+			t.Errorf("%s: run a tested RELEASE version, not latest", ref)
 		}
-		if !strings.Contains(ref, "@sha256:") {
-			t.Errorf("%s: pin the digest too, so a moved tag cannot change what runs", ref)
+	}
+}
+
+// A pin is the point of mirroring: the tag is ours, and the digest says which bytes
+// that tag was when FoxByte was tested against them. This fails while a digest is
+// empty, so a version cannot go out pinned by tag alone — run the mirror workflow
+// and put what it printed in images.go.
+func TestObjectStoreImagesArePinned(t *testing.T) {
+	for _, c := range []struct{ name, tag, digest string }{
+		{"MinIO", MinioTag, MinioDigest},
+		{"mc", MCTag, MCDigest},
+	} {
+		switch {
+		case c.digest == "":
+			t.Errorf("%s (%s) has no digest: run `gh workflow run mirror-images.yml -f tag=<release>` and pin what it prints",
+				c.name, c.tag)
+		case !strings.HasPrefix(c.digest, "sha256:") || len(c.digest) != len("sha256:")+64:
+			t.Errorf("%s: %q is not a sha256 digest", c.name, c.digest)
+		}
+	}
+	// And the reference the engine actually pulls carries it.
+	for _, ref := range []string{MinioImage, MCImage} {
+		if MinioDigest != "" && MCDigest != "" && !strings.Contains(ref, "@sha256:") {
+			t.Errorf("%s: the digest is pinned but not in the reference the engine pulls", ref)
 		}
 	}
 }
 
 // The Windows distro preloads the images the engine runs; if the names drift,
-// `fox up` on Windows would try to pull at first start.
+// `fox up` on Windows tries to pull at first start — which is exactly what stopped
+// working. Rather than repeat the names, the build reads them out of this package,
+// so this checks that it still does and that nothing has hard-coded a registry
+// that has already dropped us twice.
 func TestDistroPreloadsTheEngineImages(t *testing.T) {
 	b, err := os.ReadFile("../../deploy/wsl-distro/build.sh")
 	if err != nil {
 		t.Skip("deploy/wsl-distro/build.sh not found")
 	}
 	s := string(b)
-	for _, ref := range []string{MinioImage, MCImage} {
-		if !strings.Contains(s, ref) {
-			t.Errorf("deploy/wsl-distro/build.sh does not preload %s", ref)
+	for _, want := range []string{"internal/branch/images.go", "go_const MinioTag", "go_const MCTag",
+		"go_const MinioDigest", "go_const MCDigest"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("deploy/wsl-distro/build.sh should take the object-store images from the engine (%q missing)", want)
 		}
 	}
-	for _, old := range []string{"docker pull -q minio/minio", "docker pull -q minio/mc"} {
-		if strings.Contains(s, old) {
-			t.Errorf("deploy/wsl-distro/build.sh still pulls from Docker Hub: %q", old)
+	if !strings.Contains(s, `docker pull -q "$minio_image"`) || !strings.Contains(s, `docker pull -q "$mc_image"`) {
+		t.Error("deploy/wsl-distro/build.sh should still preload both object-store images")
+	}
+	for _, gone := range []string{"minio/minio", "minio/mc"} {
+		if strings.Contains(s, "quay.io/"+gone) || strings.Contains(s, "docker pull -q "+gone) {
+			t.Errorf("deploy/wsl-distro/build.sh still pulls %s from a registry that no longer serves us", gone)
 		}
 	}
 }

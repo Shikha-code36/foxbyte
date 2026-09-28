@@ -146,8 +146,9 @@
       <li>Automated tests for the imports (I1–I3, I7) — the last area with none.</li>
       <li>Gate release tags on the nightly suites, so a tag cannot ship past a red suite (M2).</li>
       <li>Decide how this checklist shows partial work (audit v2 G31): 9 features are badged done while carrying an open sub-item (<code>C7, D5, D6, F5, G3, H16, H17, I13, M7</code>) — down from 34. Each of those sub-items is a disclosed limit rather than unfinished work, so the remaining question is whether a limit belongs in the sub-item list at all.</li>
+      <li><b>The object store's images are FoxByte's own</b> (M6): MinIO left Docker Hub in 2026 and then quay.io stopped serving it anonymously — every tag there answers 401 — so a fresh install on macOS or Linux could not start, while existing installs carried on from their cache and Windows carried on because its distro image ships them inside it. They are mirrored to <code>ghcr.io/thefoxbyte</code> by <code>.github/workflows/mirror-images.yml</code>, which takes them out of a published release's distro asset rather than from a registry that will not serve us. <b>Run it once and pin what it prints</b> — a unit test fails while the digests are unset.</li>
       <li><b>Promotion is built</b> (H18, audit G29): a branch's recorded statements, reviewed, then applied to another branch in one transaction — attributed to whoever wrote them, with the approver beside them. Schema only. An agent can propose and cannot approve its own request.</li>
-      <li><b>From the audit, deliberately left:</b> HA beyond the demo — automatic failover and fencing across hosts (D4, G21); metrics and alerts, and supervision of the background servers themselves (B2, G27 — the containers restart); splitting the branch package and running its SQL through pgx (G30 — the deadlines are in); quotas on btrfs and per-branch CPU/memory (C6, G33); pgvector in the image (M6, G34); <code>/api/v1</code> (K1, G35).</li>
+      <li><b>From the audit, deliberately left:</b> HA beyond the demo — automatic failover and fencing across hosts (D4, G21); metrics and alerts, and supervision of the background servers themselves (B2, G27 — the containers restart); splitting the branch package and running its SQL through pgx (G30 — the deadlines are in); quotas on btrfs and per-branch CPU/memory (C6, G33).</li>
     </ol>
   <div class="foot">FOX_Checklist · overview</div>
 </section>
@@ -358,7 +359,7 @@
     <tr data-id="H1" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H1</td><td><b>DDL recording</b><ul class="subs">
       <li class="ok">Who, tool, branch, statement, status, risk</li><li class="ok">Inherited by every branch</li>
       <li class="ok">A restart records nothing: the install script's own statements are not captured</li>
-      <li class="lim">Role / database changes, some dropped object types</li><li class="ok">Agents' UPDATE and DELETE recorded; TRUNCATE by anyone</li><li class="ok">Triggers on every table, protected from drop/disable/rename</li></ul></td><td class="tb">VM §8; v2 §9; v2 §10</td></tr>
+      <li class="lim">Role / database changes, some dropped object types</li><li class="ok">Agents' UPDATE and DELETE recorded; TRUNCATE by anyone</li><li class="ok">An agent's UPDATE or DELETE with no WHERE is refused, and the attempt recorded — a superuser or db_admin can let one through</li><li class="ok">Triggers on every table, protected from drop/disable/rename</li></ul></td><td class="tb">VM §8; v2 §9; v2 §10</td></tr>
     <tr data-id="H2" data-st="part"><td class="c"><i class="ck part"></i></td><td class="id">H2</td><td><b>Hash chain, append-only &amp; verify</b><ul class="subs">
       <li class="ok">Rows can't be edited or deleted normally</li><li class="ok"><code>fox ledger verify</code></li>
       <li class="part">Superuser rewrite caught only via anchors (H10–H12)</li><li class="ok"><code>bb.policy</code> changes recorded (append-only, not chained)</li></ul></td><td class="tb">VM §8; v2 §0, §6b</td></tr>
@@ -478,7 +479,7 @@
   <table>
     <tr><th></th><th>ID</th><th>Feature · sub-features</th><th>Tested by</th></tr>
     <tr data-id="K1" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">K1</td><td><b>Control-plane REST API</b><ul class="subs">
-      <li class="ok">Branches, query, Blackbox, policy, impact, import, pipelines, keys</li><li class="next">Versioned paths (<code>/api/v1</code>)</li><li class="ok">Exact-origin CORS, branch-name check, body limits, timeouts</li><li class="ok">Branches owned by their maker; others 404 (owner, admin, or main)</li></ul></td><td class="tb">Unit; VM §1; v2 §0–§8; VM §1d</td></tr>
+      <li class="ok">Branches, query, Blackbox, policy, impact, import, pipelines, keys</li><li class="ok">Versioned paths: <code>/api/v1/…</code> reaches the same routes, and <code>/api/…</code> keeps working</li><li class="ok">Exact-origin CORS, branch-name check, body limits, timeouts</li><li class="ok">Branches owned by their maker; others 404 (owner, admin, or main)</li></ul></td><td class="tb">Unit; VM §1; v2 §0–§8; VM §1d</td></tr>
     <tr data-id="K2" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">K2</td><td><b>OpenAPI spec</b><ul class="subs">
       <li class="ok">Served, Blackbox 2.0 endpoints documented</li><li class="ok">Matches the code (import fields, status codes, auth routes, /blackbox aliases)</li><li class="ok">Drift check in CI</li></ul></td><td class="tb">Unit (drift check)</td></tr>
     <tr data-id="K3" data-st="man"><td class="c"><i class="ck man"></i></td><td class="id">K3</td><td><b>Python SDK</b><ul class="subs">
@@ -564,7 +565,7 @@
       <li class="ok">The major lives in one place, and a test holds the Dockerfile, release matrix and Windows preload to it</li>
       <li class="ok">All three suites pass on PostgreSQL 18.6: 108 + 277 + 51 checks (21 Sep)</li>
       <li class="ok">A command that moves an install from 16 to 18 (D6), and a portable backup to take first (D5)</li>
-      <li class="next">pgvector</li><li class="ok">Base image pinned by digest; wal-g checked by SHA-256</li></ul></td><td class="tb">Unit; all three suites on 18</td></tr>
+      <li class="ok">pgvector, version-pinned from PGDG for both supported majors — available, and enabled per database with <code>CREATE EXTENSION vector</code></li><li class="ok">Base image pinned by digest; wal-g checked by SHA-256</li></ul></td><td class="tb">Unit; all three suites on 18</td></tr>
     <tr data-id="M7" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">M7</td><td><b>Product name in one file</b><ul class="subs">
       <li class="ok">brand.json → Go, shell, web and installer blocks, regenerated by <code>make brand</code></li>
       <li class="ok">Stored names brand-free and frozen: a rename never migrates an install</li>
@@ -584,8 +585,7 @@
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Automatic HA failover</b><ul class="subs"><li class="todo">Health detection, fencing</li><li class="todo">Multi-host</li></ul></td><td class="tb">D4</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Pipelines: scheduling, incremental / CDC extract, DAG view</b></td><td class="tb">J1</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>More import sources: Cassandra, DynamoDB</b></td><td class="tb">I1–I8</td></tr>
-    <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>pgvector in the Postgres image</b></td><td class="tb">M6</td></tr>
-    
+        
     <tr data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">—</td><td><b>Release signatures</b> — done 22 Sep 2026</td><td class="tb">A9, M4</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Hosted cloud tier</b></td><td class="tb">—</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Networked storage disaggregation</b> (README roadmap; see the storage engine note on page 1)</td><td class="tb">C1, D1</td></tr>
