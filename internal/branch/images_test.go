@@ -57,27 +57,42 @@ func TestObjectStoreImagesComeFromOurRegistry(t *testing.T) {
 	}
 }
 
-// A pin is the point of mirroring: the tag is ours, and the digest says which bytes
-// that tag was when FoxByte was tested against them. This fails while a digest is
-// empty, so a version cannot go out pinned by tag alone — run the mirror workflow
-// and put what it printed in images.go.
-func TestObjectStoreImagesArePinned(t *testing.T) {
+// A digest, when there is one, has to be a digest and has to reach the reference the
+// engine pulls. It is empty between mirroring a new version and pinning what the
+// mirror printed, which is a normal state on a branch — so this does not fail then.
+// What must not happen is a *release* going out unpinned, and that is checked where
+// it matters, by the release workflow (TestReleaseRefusesUnpinnedImages).
+func TestObjectStoreDigestsAreWellFormed(t *testing.T) {
 	for _, c := range []struct{ name, tag, digest string }{
 		{"MinIO", MinioTag, MinioDigest},
 		{"mc", MCTag, MCDigest},
 	} {
-		switch {
-		case c.digest == "":
-			t.Errorf("%s (%s) has no digest: run `gh workflow run mirror-images.yml -f tag=<release>` and pin what it prints",
-				c.name, c.tag)
-		case !strings.HasPrefix(c.digest, "sha256:") || len(c.digest) != len("sha256:")+64:
+		if c.digest == "" {
+			t.Logf("%s (%s) is not pinned yet: run the mirror-images workflow and put the digest here", c.name, c.tag)
+			continue
+		}
+		if !strings.HasPrefix(c.digest, "sha256:") || len(c.digest) != len("sha256:")+64 {
 			t.Errorf("%s: %q is not a sha256 digest", c.name, c.digest)
 		}
+		if ref := withDigest(c.tag, c.digest); !strings.Contains(ref, "@"+c.digest) {
+			t.Errorf("%s: the digest is pinned but not in the reference the engine pulls (%s)", c.name, ref)
+		}
 	}
-	// And the reference the engine actually pulls carries it.
-	for _, ref := range []string{MinioImage, MCImage} {
-		if MinioDigest != "" && MCDigest != "" && !strings.Contains(ref, "@sha256:") {
-			t.Errorf("%s: the digest is pinned but not in the reference the engine pulls", ref)
+}
+
+// The release must refuse to publish while the object-store images are pinned by
+// tag alone: a tag in our own registry can still be moved, and a release is the one
+// thing that cannot be taken back. The check lives in the workflow because that is
+// where publishing happens; this keeps it there.
+func TestReleaseRefusesUnpinnedImages(t *testing.T) {
+	b, err := os.ReadFile("../../.github/workflows/release.yml")
+	if err != nil {
+		t.Fatalf("release.yml: %v", err)
+	}
+	s := string(b)
+	for _, want := range []string{"MinioDigest", "MCDigest", "mirror-images.yml"} {
+		if !strings.Contains(s, want) {
+			t.Errorf(".github/workflows/release.yml should refuse to publish unpinned object-store images (%q missing)", want)
 		}
 	}
 }

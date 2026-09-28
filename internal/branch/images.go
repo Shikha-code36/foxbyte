@@ -28,9 +28,10 @@ const (
 	MinioTag = "ghcr.io/thefoxbyte/minio:RELEASE.2025-09-07T16-13-09Z"
 	MCTag    = "ghcr.io/thefoxbyte/mc:RELEASE.2025-08-13T08-35-41Z"
 
-	// MinioDigest and MCDigest pin the exact bytes. Empty until the mirror has run
-	// for a version — TestObjectStoreImagesArePinned fails while they are, so a
-	// release cannot quietly go out pinned by tag alone.
+	// MinioDigest and MCDigest pin the exact bytes. Empty between mirroring a new
+	// version and pinning what the mirror printed; .github/workflows/release.yml
+	// refuses to publish while they are, so a release cannot go out pinned by tag
+	// alone — a tag in our own registry can still be moved.
 	MinioDigest = ""
 	MCDigest    = ""
 

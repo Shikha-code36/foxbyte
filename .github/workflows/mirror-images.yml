@@ -20,10 +20,15 @@
 #
 #   gh workflow run mirror-images.yml -f tag=v0.4
 #
-# It prints the digests it pushed. Those go into internal/branch/images.go and
-# deploy/wsl-distro/build.sh (a unit test keeps the two in step), and the packages
-# have to be made public once, in the repository's package settings — the engine
-# pulls them anonymously.
+# GitHub only dispatches a workflow it can find on the default branch, so this has
+# to be merged before that command works — `--ref` chooses which code runs, not
+# where the workflow is looked up. Until it is merged, the release check below is
+# what stops an unpinned version shipping.
+#
+# It prints the digests it pushed. Those go into internal/branch/images.go (the
+# distro build reads them from there), and the packages have to be made public once,
+# in the repository's package settings — the engine pulls them anonymously.
+# .github/workflows/release.yml refuses to publish while they are unpinned.
 name: mirror-images
 
 on:
