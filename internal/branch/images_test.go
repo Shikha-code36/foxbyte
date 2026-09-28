@@ -95,6 +95,14 @@ func TestReleaseRefusesUnpinnedImages(t *testing.T) {
 			t.Errorf(".github/workflows/release.yml should refuse to publish unpinned object-store images (%q missing)", want)
 		}
 	}
+	// And that what is pinned runs on both architectures: a mirrored image is
+	// amd64 only unless it was deliberately combined, and pushed that way it dies
+	// on Apple Silicon with "exec format error".
+	for _, want := range []string{"linux/amd64", "linux/arm64", "mirror-images-local.sh"} {
+		if !strings.Contains(s, want) {
+			t.Errorf(".github/workflows/release.yml should check the object-store images run on both architectures (%q missing)", want)
+		}
+	}
 }
 
 // The Windows distro preloads the images the engine runs; if the names drift,

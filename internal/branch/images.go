@@ -32,8 +32,8 @@ const (
 	// version and pinning what the mirror printed; .github/workflows/release.yml
 	// refuses to publish while they are, so a release cannot go out pinned by tag
 	// alone — a tag in our own registry can still be moved.
-	MinioDigest = ""
-	MCDigest    = ""
+	MinioDigest = "sha256:52dfd5c0bbd38d3219f2058c7af216d9f9a27a994b7b5baad09bbd38866015ff"
+	MCDigest    = "sha256:bdfae21c72b19fae5a005c56dddba25a873d75fac3dda60f55aea7e417382cbe"
 
 	// PGMajor is the PostgreSQL major a fresh install runs.
 	PGMajor = "18"
