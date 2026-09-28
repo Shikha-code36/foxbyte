@@ -141,6 +141,26 @@ export type BranchBeforeResult = {
 export const branchBeforeEntry = (source: string, entryId: number, name?: string) =>
   req('POST', `${API}/api/branches/${source}/ledger/${entryId}/branch`, name ? { name } : {}) as Promise<BranchBeforeResult>
 
+// --- Change requests: a branch's schema changes, offered for review ---
+export type RequestEntry = {
+  id: number; at: string; actor: string; kind: string
+  command: string; object: string; sql: string; risk?: string
+}
+export type ChangeRequest = {
+  id: number; source: string; target: string; created_by: string; created: string
+  status: 'open' | 'approved' | 'rejected' | 'failed'
+  fork_after_id: number; decided_by?: string; decided?: string; note?: string
+  applied: number; entries: RequestEntry[]
+}
+export const listRequests = (status = '') =>
+  req('GET', `${API}/api/requests${status ? '?status=' + status : ''}`) as Promise<ChangeRequest[]>
+export const getRequest = (id: number) =>
+  req('GET', `${API}/api/requests/${id}`) as Promise<ChangeRequest>
+export const createRequest = (source: string, target: string) =>
+  req('POST', `${API}/api/branches/${source}/request`, { target }) as Promise<ChangeRequest>
+export const decideRequest = (id: number, decision: 'approve' | 'reject', note?: string) =>
+  req('POST', `${API}/api/requests/${id}/${decision}`, note ? { note } : {}) as Promise<ChangeRequest>
+
 // --- Blackbox policy gate (docs/policy-errors.md) ---
 export type PolicyAction = 'warn' | 'block'
 export type PolicyRule = {

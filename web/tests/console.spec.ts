@@ -111,9 +111,21 @@ test('the Blackbox picks up a change on its own, and shows the chain', async ({ 
 // names the entry, and says main is left alone.
 test('a Blackbox entry offers to branch from before it, on main only', async ({ page }) => {
   await signIn(page)
+  // main's record can be empty on a fresh install (the suites run with the sample
+  // data off), so this makes its own change rather than relying on one being
+  // there — no test in this file depends on another having run.
+  const onMain = `e2e_rewind_${Date.now().toString().slice(-6)}`
   await page.goto('/blackbox', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(async (t) => {
+    await fetch('/api/branches/main/query', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ sql: `CREATE TABLE ${t} (id int)` }),
+    })
+  }, onMain)
   await page.locator('select').first().selectOption('main')
-  const firstChange = page.locator('tr.lg-row').first()
+  const firstChange = page.getByText(`public.${onMain}`).first()
   await expect(firstChange).toBeVisible({ timeout: 30_000 })
   await firstChange.click()
   const detail = page.locator('.lg-detail').first()
@@ -126,11 +138,80 @@ test('a Blackbox entry offers to branch from before it, on main only', async ({ 
 
   // On another branch the action is absent, and the page says why rather than
   // offering something the engine would refuse.
+  const onBranch = `e2e_rewind_b_${Date.now().toString().slice(-6)}`
+  await page.evaluate(async ([b, t]) => {
+    await fetch(`/api/branches/${b}/query`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ sql: `CREATE TABLE ${t} (id int)` }),
+    })
+  }, [branch, onBranch])
   await page.locator('select').first().selectOption(branch)
-  const other = page.locator('tr.lg-row').first()
+  const other = page.getByText(`public.${onBranch}`).first()
   await expect(other).toBeVisible({ timeout: 30_000 })
   await other.click()
   const otherDetail = page.locator('.lg-detail').first()
   await expect(otherDetail.getByRole('button', { name: /branch from before this change/i })).toHaveCount(0)
   await expect(otherDetail).toContainText(/only branch that archives WAL/i)
+})
+
+// Promotion: a branch's changes offered for review, then applied. The whole point
+// is that nothing reaches the target until someone decides, so the test checks
+// both halves — the target is untouched while the request is open, and holds the
+// change once it is approved.
+test('a branch\'s changes can be reviewed and applied to another branch', async ({ page }) => {
+  await signIn(page)
+  const table = `e2e_promo_${Date.now().toString().slice(-6)}`
+  const target = `e2eui3`
+  await page.goto('/requests', { waitUntil: 'domcontentloaded' })
+  // A target of its own, made and owned by this account: promoting into main would
+  // leave the change on main for every later run, and a branch is where the
+  // ownership rule (the owner may approve) is exercised anyway.
+  await page.evaluate(async ([b, t, tgt]) => {
+    const post = (url: string, body: unknown) => fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    })
+    await fetch(`/api/branches/${tgt}`, { method: 'DELETE', credentials: 'include' }).catch(() => {})
+    await post('/api/branches', { name: tgt, from: 'main' })
+    await post(`/api/branches/${b}/query`, { sql: `CREATE TABLE ${t} (id int)` })
+  }, [branch, table, target])
+
+  await expect(page.getByRole('heading', { name: 'Change requests' })).toBeVisible()
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  const [from, to] = [page.locator('select').first(), page.locator('select').nth(1)]
+  await from.selectOption(branch)
+  await to.selectOption(target)
+  await page.getByRole('button', { name: /ask for review/i }).click()
+  await expect(page.locator('.okmsg')).toContainText(new RegExp(`Nothing has been applied to ${target}`, 'i'), { timeout: 30_000 })
+
+  // The statement is shown for review, and main does not have it yet.
+  await expect(page.getByText(`CREATE TABLE ${table}`).first()).toBeVisible()
+  const has = (t: string, tgt: string) => page.evaluate(async ([tbl, b]) => {
+    const r = await fetch(`/api/branches/${b}/query`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ sql: `SELECT count(*) FROM information_schema.tables WHERE table_name = '${tbl}'` }),
+    })
+    return String((await r.json()).rows?.[0]?.[0])
+  }, [t, tgt])
+
+  expect(await has(table, target)).toBe('0')
+
+  // Approving applies it, through the confirmation that says what will happen.
+  await page.getByRole('button', { name: new RegExp(`apply to ${target}`, 'i') }).first().click()
+  await expect(page.getByRole('dialog')).toContainText(/no data is moved/i)
+  await page.getByRole('dialog').getByRole('button', { name: /^apply$/i }).click()
+  // However many statements the source has accumulated from the tests before this
+  // one: what matters is that they were applied and the table reached the target.
+  await expect(page.locator('.okmsg')).toContainText(/Applied \d+ statement/i, { timeout: 60_000 })
+  expect(await has(table, target)).toBe('1')
+
+  // Tidy up, best effort: the harness deletes this branch too, and a failed
+  // clean-up must not decide whether the test passed.
+  await page.request.delete(`/api/branches/${target}`).catch(() => {})
 })

@@ -101,6 +101,16 @@ CREATE TABLE IF NOT EXISTS branch_owners (
 CREATE TABLE IF NOT EXISTS pipeline_targets (
   branch TEXT PRIMARY KEY,
   pipeline_id TEXT NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS change_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL, target TEXT NOT NULL,
+  created_by INTEGER NOT NULL, created INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  fork_after_id INTEGER NOT NULL DEFAULT 0,
+  entries TEXT NOT NULL DEFAULT '[]',
+  decided_by INTEGER, decided INTEGER,
+  note TEXT NOT NULL DEFAULT '', applied INTEGER NOT NULL DEFAULT 0
 );`
 
 // Open opens (and migrates) the SQLite store.

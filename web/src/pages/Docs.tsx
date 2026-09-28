@@ -40,6 +40,7 @@ export default function Docs() {
           <tr><td><code>fox ha enable|status|failover|disable|failback</code></td><td>High availability (streaming standby, failover, and failback to main)</td></tr>
           <tr><td><code>fox gateway [--addr :6432] [--idle 2m]</code></td><td>The smart SQL gateway — routes by branch, auto-suspend/resume</td></tr>
           <tr><td><code>fox serve [--addr :8088]</code></td><td>Agent Branch API — one database per AI agent</td></tr>
+          <tr><td><code>fox branch request &lt;source&gt; [--to &lt;target&gt;]</code> · <code>fox request list|show|approve|reject &lt;id&gt;</code></td><td>Promotion: a branch's schema changes, reviewed, then applied to another branch (schema only)</td></tr>
           <tr><td><code>fox user create &lt;email&gt;</code> · <code>fox apikey create|list|revoke &lt;email&gt;</code></td><td>Accounts &amp; API keys</td></tr>
         </tbody>
       </table>
@@ -71,6 +72,9 @@ export default function Docs() {
           <tr><td><code>POST …/policies/check</code> · <code>GET …/policies/evaluations</code></td><td>Preview what a statement triggers; recent warnings and blocks</td></tr>
           <tr><td><code>GET|POST /api/branches/{'{name}'}/admins</code> · <code>DELETE …/admins/{'{email}'}</code></td><td>Who may override blocking rules; grant or revoke it (needs <code>db_admin</code>)</td></tr>
           <tr><td><code>POST /api/branches/{'{name}'}/impact</code></td><td>What a change would affect, before running it</td></tr>
+          <tr><td><code>POST /api/branches/{'{name}'}/request</code></td><td>Offer this branch's schema changes for review — {'{ "target": "main" }'} (409 conflict, 422 blocked by policy)</td></tr>
+          <tr><td><code>GET /api/requests</code> · <code>GET /api/requests/{'{id}'}</code></td><td>Change requests, with the statements each holds</td></tr>
+          <tr><td><code>POST /api/requests/{'{id}'}/approve|reject</code></td><td>Apply them to the target in one transaction, or decline — needs the right to manage the target</td></tr>
           <tr><td><code>GET /api/ledger/diff</code> · <code>GET /api/blackbox/diff</code></td><td>Schema changes distinguishing two branches (<code>?a=&amp;b=</code>)</td></tr>
           <tr><td><code>POST /api/import</code> · <code>POST /api/import/file</code></td><td>Migrate from a connection string ({'{ "source", "target", "continuous" }'}) or an upload</td></tr>
           <tr><td><code>GET /api/backups</code></td><td>Base backups in object storage, newest first — the oldest is the earliest point <code>fox restore --to</code> can reach</td></tr>
@@ -84,7 +88,7 @@ export default function Docs() {
 
       <h2>Agents over MCP</h2>
       <p className="muted">Agent frameworks can skip HTTP: <code>fox mcp</code> speaks the Model Context Protocol on
-        stdio, with 16 tools for branches, SQL, Blackbox, impact analysis and the policy gate.{' '}
+        stdio, with 18 tools for branches, SQL, Blackbox, impact analysis, the policy gate and change requests.{' '}
         <a href="https://github.com/thefoxbyte/foxbyte/blob/main/docs/mcp.md" target="_blank" rel="noreferrer">Setup and tool reference</a>.</p>
       <table>
         <thead><tr><th>Client config</th><th>Notes</th></tr></thead>

@@ -76,6 +76,7 @@ func Serve(addr string) error {
 	registerLedgerV2(api)                                                            // /api/branches/{name}/ledger/{integrity,checkpoint,export,entries,{id}/branch}
 	store.MountKeys(api)                                                             // /api/keys (protected via Authn below)
 	registerAccounts(api, store)                                                     // /api/account*, /api/users* (admins)
+	registerRequests(api, store)                                                     // /api/branches/{name}/request, /api/requests*
 	mux.Handle("/api/", store.Authn(checkBranchName(authorize(blackboxAlias(api))))) // …/blackbox… also reaches …/ledger… routes
 
 	// Blackbox 2.0: anchor new ledger entries outside the database on a schedule.

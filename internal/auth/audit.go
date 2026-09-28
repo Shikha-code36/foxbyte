@@ -45,6 +45,11 @@ const (
 	EvOwnerChanged   = "branch.owner_changed"
 	EvDenied         = "access.denied"
 	EvGatewayRefused = "gateway.refused"
+	// Promotion: who asked for a branch's changes to be applied elsewhere, and who
+	// decided. The statements themselves are in the target's Blackbox; this is the
+	// door they came through.
+	EvChangeRequested = "branch.change_requested"
+	EvChangeDecided   = "branch.change_decided"
 )
 
 const auditSchema = `

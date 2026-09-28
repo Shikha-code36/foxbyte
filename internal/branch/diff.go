@@ -54,13 +54,22 @@ func diffEntry(r ledger.Row) DiffEntry {
 		Object: r.ObjectIdentity, Status: r.Status}
 }
 
-// buildDiff compares two id-ordered histories.
-func buildDiff(aName, bName string, a, b []ledger.Row) LedgerDiff {
-	d := LedgerDiff{A: aName, B: bName, AOnly: []DiffEntry{}, BOnly: []DiffEntry{}, BothTouched: []DiffOverlap{}}
+// commonPrefix is how many entries two histories share: same id, same recomputed
+// hash. A branch starts as a copy of its parent's Blackbox, so this is the fork
+// point — everything after it happened on one side only. Used by the diff and by
+// promotion (promote.go), which must agree about where the branches split.
+func commonPrefix(a, b []ledger.Row) int {
 	n := 0
 	for n < len(a) && n < len(b) && a[n].ID == b[n].ID && ledger.RowHash(a[n]) == ledger.RowHash(b[n]) {
 		n++
 	}
+	return n
+}
+
+// buildDiff compares two id-ordered histories.
+func buildDiff(aName, bName string, a, b []ledger.Row) LedgerDiff {
+	d := LedgerDiff{A: aName, B: bName, AOnly: []DiffEntry{}, BOnly: []DiffEntry{}, BothTouched: []DiffOverlap{}}
+	n := commonPrefix(a, b)
 	d.CommonEntries = n
 	if n > 0 {
 		d.ForkAfterID = a[n-1].ID

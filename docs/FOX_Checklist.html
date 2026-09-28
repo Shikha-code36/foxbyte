@@ -400,9 +400,12 @@
       <li class="ok">Dependents (views, foreign keys, indexes, depth)</li><li class="ok">Other branches that have the object</li>
       <li class="ok">Policy verdict and risk score</li><li class="ok">CLI, REST, MCP, inside execute_change</li>
       <li class="part">Functions, types, schemas not recognised from SQL</li></ul></td><td class="tb">Unit; v2 §8</td></tr>
-    <tr data-id="H18" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H18</td><td><b>Blackbox diff between branches</b><ul class="subs">
+    <tr data-id="H18" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H18</td><td><b>Blackbox diff, and promoting a branch's changes</b><ul class="subs">
       <li class="ok">Fork point, changes only on each side</li><li class="ok">Objects changed on both</li>
-      <li class="ok">CLI, REST, MCP</li><li class="todo">Merge (diff only today)</li></ul></td><td class="tb">Unit; v2 §8</td></tr>
+      <li class="ok">CLI, REST, MCP</li><li class="ok">Promotion: a branch's recorded statements, reviewed, then applied to another branch in one transaction</li>
+      <li class="ok">Refused on a conflict (both sides changed the same object), on a statement the target's gate blocks, and when there is nothing to promote</li>
+      <li class="ok">Approving needs the right to manage the target, so an agent cannot approve its own request</li>
+      <li class="ok">CLI, REST, MCP and the web Requests page</li></ul></td><td class="tb">Unit; v2 §8, §8b</td></tr>
   </table>
 </section>
 
@@ -570,8 +573,7 @@
   <table>
     <tr><th></th><th>ID</th><th>Item · scope</th><th>Related</th></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Multi-tenant projects &amp; roles</b><ul class="subs"><li class="todo">Projects / organisations</li><li class="todo">Per-branch permissions (RBAC)</li></ul></td><td class="tb">G1, H6</td></tr>
-    <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Branch merge</b><ul class="subs"><li class="todo">Apply one branch's schema changes to another</li></ul></td><td class="tb">H18</td></tr>
-    <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Scheduled backups &amp; retention</b></td><td class="tb">D2</td></tr>
+        <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Scheduled backups &amp; retention</b></td><td class="tb">D2</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Automatic HA failover</b><ul class="subs"><li class="todo">Health detection, fencing</li><li class="todo">Multi-host</li></ul></td><td class="tb">D4</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Pipelines: scheduling, incremental / CDC extract, DAG view</b></td><td class="tb">J1</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>More import sources: Cassandra, DynamoDB</b></td><td class="tb">I1–I8</td></tr>

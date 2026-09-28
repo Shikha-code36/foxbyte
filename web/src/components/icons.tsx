@@ -31,6 +31,10 @@ export const IconBlackbox = (p: IconProps) => (
 export const IconIntegrity = (p: IconProps) => (
   <Icon {...p}><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><polyline points="8.5 12 11 14.5 15.5 10" /></Icon>
 )
+// Change requests: two branches, and one merging back into the other.
+export const IconRequests = (p: IconProps) => (
+  <Icon {...p}><circle cx="6.5" cy="5" r="2.5" /><circle cx="6.5" cy="19" r="2.5" /><circle cx="17.5" cy="12" r="2.5" /><path d="M6.5 7.5v9" /><path d="M9 5h3.5a2.5 2.5 0 0 1 2.5 2.5V9.5" /><polyline points="13 12.5 15 10.5 17 12.5" /></Icon>
+)
 export const IconPolicies = (p: IconProps) => (
   <Icon {...p}><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1" /><polyline points="9 13 11 15 15 11" /></Icon>
 )

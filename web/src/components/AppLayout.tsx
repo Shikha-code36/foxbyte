@@ -32,6 +32,7 @@ export const APP_NAV: NavSection[] = [
     items: [
       { to: '/blackbox', label: 'Changes', icon: I.IconBlackbox, also: ['/ledger'] },
       { to: '/integrity', label: 'Integrity', icon: I.IconIntegrity },
+      { to: '/requests', label: 'Requests', icon: I.IconRequests },
       { to: '/policies', label: 'Policies', icon: I.IconPolicies },
     ],
   },

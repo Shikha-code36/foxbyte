@@ -127,6 +127,25 @@ every row of the **Blackbox** page in the console, and at
 `POST /api/branches/main/ledger/{id}/branch`. `main` is the only branch this
 works from: it is the only one that archives WAL.
 
+**Bring a branch's changes back.** Branching was half a workflow until this: you
+could copy the database, change it, and prove what changed — and then there was
+no way to apply it to `main`. A **change request** offers a branch's recorded
+statements for review, and someone who can manage the target applies them:
+
+```bash
+fox branch request dev --to main   # what dev has that main does not; nothing is applied
+fox request show 3                 # the statements, in the order they ran on dev
+fox request approve 3              # applied to main in one transaction
+```
+
+What is applied is the Blackbox's own record of what ran on `dev`, so `main` ends
+up holding the same statements, each attributed to whoever wrote it, with the
+approver beside it. It is refused if both branches changed the same object since
+they split, if `main`'s policy gate would block a statement, or if there is
+nothing to promote. **Schema only — no data is moved.** An agent can ask
+(MCP `request_changes`) and cannot approve its own: approving needs the right to
+manage the target. There is a **Requests** page in the console.
+
 Beside it, a **security log** records what happens at the doors — sign-ins and
 failed ones, sign-ups, API keys made and revoked, password changes, deleted
 accounts, admin grants and every refused request — chained and anchored the

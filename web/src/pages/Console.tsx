@@ -62,8 +62,30 @@ export default function Console() {
   const [queryRes, setQueryRes] = useState<QueryResult | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // The branch list is what the picker is made of, and it used to be fetched once:
+  // a single failed call — the engine still coming up, a slow answer from the
+  // storage listing underneath — left the picker empty for as long as the page
+  // stayed open, with no way back but a reload. So it keeps trying until it has a
+  // list, then stops.
   useEffect(() => {
-    getBranches().then(b => { setBranches(b); setOffline(false) }).catch(() => setOffline(true))
+    let alive = true
+    let timer: number | undefined
+    const load = () => {
+      getBranches()
+        .then(b => {
+          if (!alive) return
+          setBranches(b)
+          setOffline(false)
+          if (b.length === 0) timer = window.setTimeout(load, 4000) // nothing at all is not an answer
+        })
+        .catch(() => {
+          if (!alive) return
+          setOffline(true)
+          timer = window.setTimeout(load, 4000)
+        })
+    }
+    load()
+    return () => { alive = false; if (timer) window.clearTimeout(timer) }
   }, [])
 
   // The query API reports SQL errors in the body rather than throwing, so both

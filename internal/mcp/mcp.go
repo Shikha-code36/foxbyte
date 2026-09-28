@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/thefoxbyte/foxbyte/internal/access"
+	"github.com/thefoxbyte/foxbyte/internal/auth"
 	"github.com/thefoxbyte/foxbyte/internal/branch"
 	"github.com/thefoxbyte/foxbyte/internal/version"
 )
@@ -203,6 +204,18 @@ func toolList() []map[string]any {
 				"branch": str("branch name (default main)"),
 				"sql":    str("the DDL statement to check"),
 			}, []string{"sql"}),
+		tool("request_changes",
+			"Offer this branch's schema changes for review, to be applied to another branch (default main). Nothing is applied: it records the statements your branch's Blackbox holds that the target's does not, and a person who can manage the target decides. Refused when both branches changed the same object since they split, when the target's policy gate would block a statement, or when there is nothing to promote. You cannot approve your own request — that is the point of it.",
+			map[string]any{
+				"branch": str("the branch whose changes to offer (default main)"),
+				"target": str("the branch they would be applied to (default main)"),
+			}, nil),
+		tool("list_change_requests",
+			"The change requests made from a branch, newest first, with what each holds and whether it was approved, rejected or applied.",
+			map[string]any{
+				"branch": str("the branch the requests were made from (default main)"),
+				"status": str("open | approved | rejected | failed (default: any)"),
+			}, nil),
 		tool("branch_before_change",
 			"Create a new branch holding main exactly as it was just before a Blackbox entry (its id from `blackbox_entries` or `ledger_entries`) — to inspect or recover from a bad change. main is not modified. Takes a few minutes (base backup + WAL replay).",
 			map[string]any{
@@ -475,6 +488,68 @@ func runTool(name string, args json.RawMessage) (string, error) {
 			return "", err
 		}
 		return branch.FormatPolicyCheck(tag, matches), nil
+
+	case "request_changes":
+		var a struct {
+			Branch string `json:"branch"`
+			Target string `json:"target"`
+		}
+		_ = json.Unmarshal(args, &a)
+		if a.Branch == "" {
+			a.Branch = "main"
+		}
+		if a.Target == "" {
+			a.Target = "main"
+		}
+		// The target is read as well as the source, so the key must reach it.
+		if acl != nil && !acl.Can(me.User, a.Target, access.Use) {
+			return "", fmt.Errorf("no branch %q", a.Target)
+		}
+		history, err := store.ApprovedRequestsFrom(a.Branch, a.Target)
+		if err != nil {
+			return "", err
+		}
+		entries, forkAfter, err := branch.BuildRequest(a.Branch, a.Target, history)
+		if err != nil {
+			return "", err
+		}
+		snapshot, err := branch.MarshalEntries(entries)
+		if err != nil {
+			return "", err
+		}
+		c, err := store.CreateChangeRequest(me.User.ID, a.Branch, a.Target, forkAfter, snapshot)
+		if err != nil {
+			return "", err
+		}
+		store.Audit(auth.EvChangeRequested, me.Actor, fmt.Sprintf("request #%d: %s → %s", c.ID, a.Branch, a.Target),
+			"", fmt.Sprintf("%d statement(s), via MCP", len(entries)))
+		return branch.FormatRequest(c, entries) +
+			fmt.Sprintf("\nNothing has been applied to %s. Someone who can manage it decides.\n", a.Target), nil
+
+	case "list_change_requests":
+		var a struct {
+			Branch string `json:"branch"`
+			Status string `json:"status"`
+		}
+		_ = json.Unmarshal(args, &a)
+		if a.Branch == "" {
+			a.Branch = "main"
+		}
+		list, err := store.ChangeRequests(a.Status, "")
+		if err != nil {
+			return "", err
+		}
+		var b strings.Builder
+		for _, c := range list {
+			if c.Source != a.Branch {
+				continue
+			}
+			b.WriteString(branch.RequestSummary(c) + "\n")
+		}
+		if b.Len() == 0 {
+			return fmt.Sprintf("No change requests from %s.\n", a.Branch), nil
+		}
+		return b.String(), nil
 
 	case "branch_before_change":
 		var a struct {
