@@ -54,9 +54,16 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # The names the engine runs, read from the source rather than repeated here,
-      # so this cannot drift from what a fresh install looks for.
-      - name: Read the image names from the engine
+      # Where the images are going: the names a fresh install looks for, read from
+      # the engine rather than repeated here.
+      #
+      # Where they come from is a different question, and deliberately not this:
+      # the release's distro image was built when the engine still pulled from
+      # quay.io, so the images inside it carry those names. Resolving the source
+      # from the destination was wrong and failed — the source is found in the tar
+      # by what the image is, so this keeps working whatever registry the engine
+      # names next.
+      - name: Read the destination names from the engine
         id: names
         run: |
           set -euo pipefail
@@ -65,7 +72,7 @@ jobs:
           [ -n "$minio" ] && [ -n "$mc" ] || { echo "::error::could not read the image tags from internal/branch/images.go"; exit 1; }
           echo "minio=$minio" >> "$GITHUB_OUTPUT"
           echo "mc=$mc" >> "$GITHUB_OUTPUT"
-          echo "engine expects: $minio and $mc"
+          echo "a fresh install expects: $minio and $mc"
 
       - name: Take the images out of the published distro image
         env:
@@ -79,6 +86,21 @@ jobs:
           tar --zstd -xf /tmp/foxbyte-distro.tar.zst -C /tmp ./usr/local/share/dbengine/images/foxbyte-images.tar
           docker load -i /tmp/usr/local/share/dbengine/images/foxbyte-images.tar
           docker images --format '{{.Repository}}:{{.Tag}}'
+          # The object store's two images, whatever registry the distro pulled them
+          # from: the server is the one whose repository ends in /minio, the client
+          # the one ending in /mc.
+          # `|| true`: with `set -e`, a grep that matches nothing would end the step
+          # here, before the message below could say what was wrong.
+          find_one() {
+            docker images --format '{{.Repository}}:{{.Tag}}' \
+              | grep -E "/$1:" | grep -v '<none>' | head -1 || true
+          }
+          src_minio="$(find_one minio)"; src_mc="$(find_one mc)"
+          [ -n "$src_minio" ] && [ -n "$src_mc" ] || {
+            echo "::error::the distro image from ${{ inputs.tag }} does not carry both object-store images"; exit 1; }
+          echo "src_minio=$src_minio" >> "$GITHUB_ENV"
+          echo "src_mc=$src_mc" >> "$GITHUB_ENV"
+          echo "found in the distro: $src_minio and $src_mc"
 
       - name: Push them to this project's registry
         id: push
@@ -89,23 +111,24 @@ jobs:
         run: |
           set -euo pipefail
           echo "$GH_TOKEN" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-          owner="$(echo "${GITHUB_REPOSITORY%%/*}" | tr '[:upper:]' '[:lower:]')"
-          push_one() { # <source ref> <name in our registry> -> prints the digest
-            local src="$1" name="$2" version dest
-            version="${src##*:}"
-            dest="ghcr.io/$owner/$name:$version"
+          push_one() { # <source ref from the distro> <destination ref> -> the digest
+            local src="$1" dest="$2"
             docker image inspect "$src" >/dev/null || {
-              echo "::error::$src is not in the distro image — is internal/branch/images.go ahead of release ${{ inputs.tag }}?"; exit 1; }
+              echo "::error::$src is not in the distro image from ${{ inputs.tag }}"; exit 1; }
+            # The version the engine asks for has to be the one being mirrored, or a
+            # fresh install would look for a tag this never pushed.
+            [ "${src##*:}" = "${dest##*:}" ] || {
+              echo "::error::the distro carries ${src##*:} but the engine asks for ${dest##*:} — mirror the release that matches, or update internal/branch/images.go"; exit 1; }
             docker tag "$src" "$dest"
             docker push -q "$dest"
             docker buildx imagetools inspect "$dest" --format '{{.Manifest.Digest}}'
           }
-          minio_digest="$(push_one "$MINIO" minio)"
-          mc_digest="$(push_one "$MC" mc)"
+          minio_digest="$(push_one "$src_minio" "$MINIO")"
+          mc_digest="$(push_one "$src_mc" "$MC")"
           echo "minio_digest=$minio_digest" >> "$GITHUB_OUTPUT"
           echo "mc_digest=$mc_digest" >> "$GITHUB_OUTPUT"
           {
-            echo "### Mirrored to ghcr.io/$owner"
+            echo "### Mirrored"
             echo
             echo '```go'
             echo "MinioImage = MinioTag + \"@$minio_digest\""
@@ -113,7 +136,7 @@ jobs:
             echo '```'
             echo
             echo "Put those in \`internal/branch/images.go\` and \`deploy/wsl-distro/build.sh\`."
-            echo "Make both packages public once, in the repository's package settings:"
+            echo "**Make both packages public** once, in the repository's package settings:"
             echo "the engine pulls them without credentials."
           } >> "$GITHUB_STEP_SUMMARY"
 
