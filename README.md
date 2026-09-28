@@ -347,6 +347,11 @@ fox backup export               # portable copy of every branch, on this machine
 fox backup restore <file> --as <new-branch>
 ```
 
+**The object store's images come from FoxByte's own registry.** MinIO's images
+left Docker Hub, and then quay.io stopped serving them without credentials, so
+they are mirrored to `ghcr.io/thefoxbyte` and pinned there. If you run your own
+copy, point the engine at it with `FOX_MINIO_IMAGE` and `FOX_MC_IMAGE`.
+
 **Backups are taken for you.** `fox start` takes a first base backup on an
 install that has none, so point-in-time restore works from the first minutes;
 the control plane takes another whenever the newest is older than

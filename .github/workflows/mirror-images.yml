@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Mirrors the object-store images into this project's own registry.
+#
+# MinIO's images have moved twice: off Docker Hub in 2026, and then behind
+# authentication on quay.io — every tag there, including `latest`, now answers 401
+# to an anonymous pull. A fresh install on macOS or Linux cannot start without
+# them (the engine runs MinIO for the WAL archive and base backups), so FoxByte
+# stopped being installable on those platforms the day that changed, while
+# existing installs carried on from their local cache.
+#
+# The bytes come from FoxByte's own published release, not from a registry: the
+# Windows distro image has always carried these images preloaded
+# (deploy/wsl-distro/build.sh), and that distro is a release asset. So the images
+# can be taken out of it and pushed to ghcr.io/thefoxbyte with the token this
+# workflow already has — no quay account, no new secret, and nothing to pull from
+# a registry that will not serve us.
+#
+# Run it once per image version:
+#
+#   gh workflow run mirror-images.yml -f tag=v0.4
+#
+# GitHub only dispatches a workflow it can find on the default branch, so this has
+# to be merged before that command works — `--ref` chooses which code runs, not
+# where the workflow is looked up. Until it is merged, the release check below is
+# what stops an unpinned version shipping.
+#
+# It prints the digests it pushed. Those go into internal/branch/images.go (the
+# distro build reads them from there), and the packages have to be made public once,
+# in the repository's package settings — the engine pulls them anonymously.
+# .github/workflows/release.yml refuses to publish while they are unpinned.
+name: mirror-images
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release whose distro asset holds the images (e.g. v0.4)'
+        required: true
+      expect_minio_digest:
+        description: 'Fail unless the pushed MinIO digest is this (leave empty on the first run)'
+        required: false
+      expect_mc_digest:
+        description: 'Fail unless the pushed mc digest is this (leave empty on the first run)'
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The names the engine runs, read from the source rather than repeated here,
+      # so this cannot drift from what a fresh install looks for.
+      - name: Read the image names from the engine
+        id: names
+        run: |
+          set -euo pipefail
+          minio="$(grep -oE 'MinioTag *= *"[^"]+"' internal/branch/images.go | sed 's/.*"\(.*\)"/\1/')"
+          mc="$(grep -oE 'MCTag *= *"[^"]+"' internal/branch/images.go | sed 's/.*"\(.*\)"/\1/')"
+          [ -n "$minio" ] && [ -n "$mc" ] || { echo "::error::could not read the image tags from internal/branch/images.go"; exit 1; }
+          echo "minio=$minio" >> "$GITHUB_OUTPUT"
+          echo "mc=$mc" >> "$GITHUB_OUTPUT"
+          echo "engine expects: $minio and $mc"
+
+      - name: Take the images out of the published distro image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq zstd
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'foxbyte-distro.tar.zst' --dir /tmp
+          # Only the one file: the distro is a whole root filesystem.
+          tar --zstd -xf /tmp/foxbyte-distro.tar.zst -C /tmp ./usr/local/share/dbengine/images/foxbyte-images.tar
+          docker load -i /tmp/usr/local/share/dbengine/images/foxbyte-images.tar
+          docker images --format '{{.Repository}}:{{.Tag}}'
+
+      - name: Push them to this project's registry
+        id: push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MINIO: ${{ steps.names.outputs.minio }}
+          MC: ${{ steps.names.outputs.mc }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          owner="$(echo "${GITHUB_REPOSITORY%%/*}" | tr '[:upper:]' '[:lower:]')"
+          push_one() { # <source ref> <name in our registry> -> prints the digest
+            local src="$1" name="$2" version dest
+            version="${src##*:}"
+            dest="ghcr.io/$owner/$name:$version"
+            docker image inspect "$src" >/dev/null || {
+              echo "::error::$src is not in the distro image — is internal/branch/images.go ahead of release ${{ inputs.tag }}?"; exit 1; }
+            docker tag "$src" "$dest"
+            docker push -q "$dest"
+            docker buildx imagetools inspect "$dest" --format '{{.Manifest.Digest}}'
+          }
+          minio_digest="$(push_one "$MINIO" minio)"
+          mc_digest="$(push_one "$MC" mc)"
+          echo "minio_digest=$minio_digest" >> "$GITHUB_OUTPUT"
+          echo "mc_digest=$mc_digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Mirrored to ghcr.io/$owner"
+            echo
+            echo '```go'
+            echo "MinioImage = MinioTag + \"@$minio_digest\""
+            echo "MCImage    = MCTag + \"@$mc_digest\""
+            echo '```'
+            echo
+            echo "Put those in \`internal/branch/images.go\` and \`deploy/wsl-distro/build.sh\`."
+            echo "Make both packages public once, in the repository's package settings:"
+            echo "the engine pulls them without credentials."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A pin is only worth having if it is checked. On a later run, pass the
+      # digests the code pins and this fails if the push produced anything else.
+      - name: The pushed digests must be the ones the code pins
+        if: ${{ inputs.expect_minio_digest != '' || inputs.expect_mc_digest != '' }}
+        env:
+          GOT_MINIO: ${{ steps.push.outputs.minio_digest }}
+          GOT_MC: ${{ steps.push.outputs.mc_digest }}
+          WANT_MINIO: ${{ inputs.expect_minio_digest }}
+          WANT_MC: ${{ inputs.expect_mc_digest }}
+        run: |
+          set -euo pipefail
+          fail=0
+          check() { # <what> <got> <want>
+            [ -z "$3" ] && return 0
+            if [ "$2" != "$3" ]; then
+              echo "::error::$1 was pushed as $2, but the code pins $3"; fail=1
+            else
+              echo "$1 matches the pin ($3)"
+            fi
+          }
+          check MinIO "$GOT_MINIO" "$WANT_MINIO"
+          check mc "$GOT_MC" "$WANT_MC"
+          exit "$fail"

@@ -8,21 +8,51 @@ import (
 	"strings"
 )
 
-// MinIO's container images are no longer served from Docker Hub (minio/minio and
-// minio/mc stopped resolving in 2026); they are still published on quay.io. The
-// engine uses quay.io, pinned to the releases FoxByte was tested with — by tag
-// and by digest (audit v2 G23), so a pull gets exactly those bytes even if the
-// tag is moved. deploy/wsl-distro/build.sh preloads the same images (a test
-// keeps the two in step).
+// The object store's images come from FoxByte's own registry.
+//
+// MinIO's images have moved twice. They left Docker Hub in 2026, and then quay.io
+// stopped serving them anonymously: every tag there, `latest` included, answers
+// 401 to a pull without credentials. The engine runs MinIO for the WAL archive and
+// base backups, so the day that changed, a fresh install on macOS or Linux could
+// no longer start — while existing installs carried on from their local cache, and
+// Windows carried on because its distro image has always shipped the images inside
+// it (deploy/wsl-distro/build.sh).
+//
+// So they are mirrored to ghcr.io/thefoxbyte, beside the engine image, by
+// .github/workflows/mirror-images.yml — which takes them out of a published
+// release's distro asset rather than from a registry that will not serve us. The
+// versions are the ones FoxByte is tested with; the digests are what that workflow
+// pushed, and it can be re-run with them to check that a tag still resolves to the
+// same bytes (audit v2 G23).
 const (
-	MinioImage = MinioTag + "@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
-	MCImage    = MCTag + "@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
-	MinioTag   = "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"
-	MCTag      = "quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z"
+	MinioTag = "ghcr.io/thefoxbyte/minio:RELEASE.2025-09-07T16-13-09Z"
+	MCTag    = "ghcr.io/thefoxbyte/mc:RELEASE.2025-08-13T08-35-41Z"
+
+	// MinioDigest and MCDigest pin the exact bytes. Empty between mirroring a new
+	// version and pinning what the mirror printed; .github/workflows/release.yml
+	// refuses to publish while they are, so a release cannot go out pinned by tag
+	// alone — a tag in our own registry can still be moved.
+	MinioDigest = ""
+	MCDigest    = ""
 
 	// PGMajor is the PostgreSQL major a fresh install runs.
 	PGMajor = "18"
 )
+
+// MinioImage and MCImage are what the engine pulls: the tag with its digest when
+// there is one, so docker checks the bytes, and the bare tag before the mirror has
+// run for that version.
+var (
+	MinioImage = withDigest(MinioTag, MinioDigest)
+	MCImage    = withDigest(MCTag, MCDigest)
+)
+
+func withDigest(tag, digest string) string {
+	if digest == "" {
+		return tag
+	}
+	return tag + "@" + digest
+}
 
 // PostgresBaseDigests pins the official postgres:<major>-bookworm image the
 // engine image is built FROM, per major (multi-arch index digests, 22 Sep 2026).

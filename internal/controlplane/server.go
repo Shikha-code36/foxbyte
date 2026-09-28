@@ -70,14 +70,17 @@ func Serve(addr string) error {
 
 	api := http.NewServeMux()
 	registerAPI(api)
-	registerPipelines(api, store)                                                    // /api/pipelines* (ETL)
-	registerImpact(api)                                                              // /api/branches/{name}/impact, /api/{ledger,blackbox}/diff
-	registerPolicy(api, store)                                                       // /api/branches/{name}/policies* and /admins (Blackbox policy gate)
-	registerLedgerV2(api)                                                            // /api/branches/{name}/ledger/{integrity,checkpoint,export,entries,{id}/branch}
-	store.MountKeys(api)                                                             // /api/keys (protected via Authn below)
-	registerAccounts(api, store)                                                     // /api/account*, /api/users* (admins)
-	registerRequests(api, store)                                                     // /api/branches/{name}/request, /api/requests*
-	mux.Handle("/api/", store.Authn(checkBranchName(authorize(blackboxAlias(api))))) // …/blackbox… also reaches …/ledger… routes
+	registerPipelines(api, store) // /api/pipelines* (ETL)
+	registerImpact(api)           // /api/branches/{name}/impact, /api/{ledger,blackbox}/diff
+	registerPolicy(api, store)    // /api/branches/{name}/policies* and /admins (Blackbox policy gate)
+	registerLedgerV2(api)         // /api/branches/{name}/ledger/{integrity,checkpoint,export,entries,{id}/branch}
+	store.MountKeys(api)          // /api/keys (protected via Authn below)
+	registerAccounts(api, store)  // /api/account*, /api/users* (admins)
+	registerRequests(api, store)  // /api/branches/{name}/request, /api/requests*
+	// versionAlias first: /api/v1/… is rewritten to /api/… before authorization or
+	// the Blackbox alias look at the path, so every route is reachable both ways
+	// without a second copy of it (audit v2 G35).
+	mux.Handle("/api/", versionAlias(store.Authn(checkBranchName(authorize(blackboxAlias(api)))))) // …/blackbox… also reaches …/ledger… routes
 
 	// Blackbox 2.0: anchor new ledger entries outside the database on a schedule.
 	branch.StartCheckpointer()

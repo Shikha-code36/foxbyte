@@ -545,7 +545,7 @@ BEGIN
     IF r.command_tag = 'CREATE INDEX' AND r.object_identity ~ '_pkey$' THEN CONTINUE; END IF;
     -- The Blackbox's own data-change triggers (datachanges.sql), attached to
     -- every table: plumbing, like the objects in schema bb.
-    IF r.command_tag = 'CREATE TRIGGER' AND r.object_identity ~ '^bb_(guard_truncate|record_dml) on ' THEN CONTINUE; END IF;
+    IF r.command_tag = 'CREATE TRIGGER' AND r.object_identity ~ '^bb_(guard_truncate|record_dml|guard_dml) on ' THEN CONTINUE; END IF;
     st := 'APPLIED'; rk := NULL;
     IF r.command_tag = 'ALTER TABLE' AND EXISTS (SELECT 1 FROM unnest(t) x WHERE x ~* '\malter\M[^;]*\mtype\M') THEN
       st := 'FLAGGED'; rk := 'type-change';

@@ -1201,16 +1201,53 @@ apsql() { psql "$ADSN" -tAc "$1" 2>&1; }
 apsql "CREATE TABLE ad(x int); INSERT INTO ad SELECT generate_series(1,10)" >/dev/null
 A0="$(pg pg-agent-v2dc 'SELECT max(id) FROM bb.schema_ledger')"
 apsql "DELETE FROM ad WHERE x > 7" >/dev/null
-apsql "UPDATE ad SET x = 0" >/dev/null
+apsql "UPDATE ad SET x = 0 WHERE x < 3" >/dev/null
 assert_eq "an agent's DELETE and UPDATE are recorded, as the agent" \
   "$(pg pg-agent-v2dc "SELECT string_agg(command_tag||'|'||object_identity||'|'||actor||'/'||actor_kind, ',' ORDER BY id) FROM bb.schema_ledger WHERE id > $A0")" \
   "DELETE|public.ad|agent-v2dc/agent,UPDATE|public.ad|agent-v2dc/agent"
 assert_eq "…with the statement that ran" \
   "$(pg pg-agent-v2dc "SELECT count(*) FROM bb.schema_ledger WHERE id > $A0 AND statement LIKE 'DELETE FROM ad WHERE x > 7%'")" "1"
 A1="$(pg pg-agent-v2dc 'SELECT max(id) FROM bb.schema_ledger')"
-apsql "BEGIN; DELETE FROM ad; ROLLBACK" >/dev/null
+apsql "BEGIN; DELETE FROM ad WHERE x > 5; ROLLBACK" >/dev/null
 assert_eq "a change rolled back leaves no entry" "$(pg pg-agent-v2dc "SELECT count(*) FROM bb.schema_ledger WHERE id > $A1")" "0"
+# A refusal is the other way round: it is recorded through a second connection, so
+# the record of the attempt survives the rollback the refusal causes.
+A1b="$(pg pg-agent-v2dc 'SELECT max(id) FROM bb.schema_ledger')"
+apsql "BEGIN; DELETE FROM ad; ROLLBACK" >/dev/null 2>&1
+assert_eq "…but a refused one is recorded even though the transaction rolled back" \
+  "$(pg pg-agent-v2dc "SELECT string_agg(command_tag||'|'||status, ',') FROM bb.schema_ledger WHERE id > $A1b")" "DELETE|BLOCKED"
 assert_eq "an agent's TRUNCATE is blocked" "$(apsql 'TRUNCATE ad' | grep -c 'guardrail: TRUNCATE')|$(pg pg-agent-v2dc 'SELECT count(*) FROM ad')" "1|7"
+
+# Recording an agent emptying a table was not enough: "an agent cannot silently
+# wipe your rows" is only true if something refuses. A DELETE or UPDATE with no
+# WHERE at all is refused for agents, and the attempt is recorded.
+A2="$(pg pg-agent-v2dc 'SELECT max(id) FROM bb.schema_ledger')"
+assert_eq "an agent's DELETE with no WHERE is refused, and the rows are still there" \
+  "$(apsql 'DELETE FROM ad' | grep -c 'with no WHERE is blocked')|$(pg pg-agent-v2dc 'SELECT count(*) FROM ad')" "1|7"
+assert_eq "…the attempt is recorded, as BLOCKED" \
+  "$(pg pg-agent-v2dc "SELECT string_agg(command_tag||'|'||status||'|'||risk, ',') FROM bb.schema_ledger WHERE id > $A2")" \
+  "DELETE|BLOCKED|unqualified"
+A3="$(pg pg-agent-v2dc 'SELECT max(id) FROM bb.schema_ledger')"
+assert_eq "an agent's UPDATE with no WHERE is refused too" \
+  "$(apsql 'UPDATE ad SET x = 0' | grep -c 'with no WHERE is blocked')|$(pg pg-agent-v2dc 'SELECT count(DISTINCT x) FROM ad' | awk '{print ($1>1)}')" "1|1"
+assert_eq "…recorded as BLOCKED as well" \
+  "$(pg pg-agent-v2dc "SELECT string_agg(command_tag||'|'||status, ',') FROM bb.schema_ledger WHERE id > $A3")" "UPDATE|BLOCKED"
+# A WHERE is enough, whatever it says: the guard refuses a statement with no
+# condition, not one whose condition it dislikes.
+assert_eq "a WHERE that matches everything is allowed — the guard is about a missing condition" \
+  "$(apsql 'DELETE FROM ad WHERE true' | grep -c 'blocked')|$(pg pg-agent-v2dc 'SELECT count(*) FROM ad')" "0|0"
+apsql "INSERT INTO ad SELECT generate_series(1,7)" >/dev/null
+# A person is not an agent: their unqualified DELETE is their own decision. On an
+# ordinary branch, because every connection to an *agent's* branch is attributed to
+# that agent (the engine sets bb.actor_kind on the database), so the guard applies
+# there even to an operator's psql — with the superuser's override available.
+pg pg-v2dc "CREATE TABLE humandml(x int); INSERT INTO humandml SELECT generate_series(1,3)" >/dev/null
+assert_eq "a human's DELETE with no WHERE is not refused" \
+  "$(pg pg-v2dc 'DELETE FROM humandml' | grep -c 'blocked')|$(pg pg-v2dc 'SELECT count(*) FROM humandml')" "0|0"
+assert_eq "…and on an agent's branch an admin can still override the guard once" \
+  "$(pg pg-agent-v2dc 'SET bb.allow_destructive=on; DELETE FROM ad' | grep -c 'blocked')|$(pg pg-agent-v2dc 'SELECT count(*) FROM ad')" "0|0"
+apsql "INSERT INTO ad SELECT generate_series(1,7)" >/dev/null
+pg pg-v2dc "SET bb.allow_destructive=on; DROP TABLE humandml" >/dev/null
 assert_eq "the agent cannot drop the Blackbox trigger on its own table" \
   "$(apsql 'DROP TRIGGER bb_record_dml ON ad' | grep -c 'cannot be dropped')" "1"
 assert_eq "…nor disable it" "$(apsql 'ALTER TABLE ad DISABLE TRIGGER ALL' | grep -c 'cannot be disabled or renamed')" "1"
@@ -1218,7 +1255,9 @@ assert_eq "…nor rename it out of the way" "$(apsql 'ALTER TRIGGER bb_record_dm
 assert_eq "…and both are still there, enabled" \
   "$(pg pg-agent-v2dc "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.ad'::regclass AND tgname IN ('bb_guard_truncate','bb_record_dml') AND tgenabled <> 'D'")" "2"
 assert_eq "a table made by CREATE TABLE AS gets them too" \
-  "$(apsql 'CREATE TABLE ad2 AS SELECT * FROM ad' >/dev/null; pg pg-agent-v2dc "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.ad2'::regclass AND tgname LIKE 'bb_%'")" "2"
+  "$(apsql 'CREATE TABLE ad2 AS SELECT * FROM ad' >/dev/null; pg pg-agent-v2dc "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.ad2'::regclass AND tgname LIKE 'bb_%'")" "3"
+assert_eq "…including the one that refuses an unqualified change" \
+  "$(pg pg-agent-v2dc "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'public.ad2'::regclass AND tgname = 'bb_guard_dml'")" "1"
 curl -sk -o /dev/null -H "$AUTH" -X DELETE "$AGENTS/agents/v2dc/branch"
 $S branch delete v2dc >/dev/null 2>&1
 

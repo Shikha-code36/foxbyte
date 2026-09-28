@@ -103,6 +103,25 @@ jobs:
         with:
           go-version: '1.26'
 
+      # A release is the one thing that cannot be taken back, so it must not go out
+      # with the object store pinned by tag alone: a tag in our own registry can
+      # still be moved, and then an install would run bytes nobody tested. The
+      # digests come from .github/workflows/mirror-images.yml, which prints them.
+      - name: The object-store images must be pinned by digest
+        run: |
+          set -euo pipefail
+          missing=0
+          for c in MinioDigest MCDigest; do
+            v="$(sed -n "s/^[[:space:]]*$c[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" internal/branch/images.go | head -1)"
+            if [ -z "$v" ]; then
+              echo "::error::$c is empty in internal/branch/images.go — run the mirror-images workflow for this version and pin what it prints"
+              missing=1
+            else
+              echo "$c = $v"
+            fi
+          done
+          exit "$missing"
+
       - name: Build release artifacts
         run: make release VERSION="${TAG#v}"
         env:

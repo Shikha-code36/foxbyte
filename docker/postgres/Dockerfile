@@ -28,6 +28,8 @@ ARG PG_MAJOR=18
 ARG PG_DIGEST=sha256:3725f4e2499eef5134592b3b4ab79a543ed7f8e533b05b5b637af926630f6650
 FROM postgres:${PG_MAJOR}-bookworm@${PG_DIGEST}
 
+# PG_MAJOR was consumed by FROM; re-declared so the layers below can use it.
+ARG PG_MAJOR
 ARG WALG_VERSION=v3.0.9
 ARG WALG_SHA256_AMD64=51ec330530f98fc3eb4f008fa539d291a2cac51e7076b256472862e45ceff0bd
 ARG WALG_SHA256_ARM64=891ba47b17fa8b58587f06668d4de4db9469e1034e23e32fa545dd4a6bb40f8e
@@ -51,6 +53,21 @@ RUN set -eux; \
     chmod +x /usr/local/bin/wal-g; \
     rm -f /tmp/wal-g.tar.gz; \
     /usr/local/bin/wal-g --version
+
+# pgvector, from the PGDG apt repository the official image already trusts (audit
+# v2 G34). The product is aimed at agent workloads, and an agent that needs
+# embeddings should not have to leave the database it was given to store them.
+# Nothing is enabled by it: `CREATE EXTENSION vector` is the user's to run, per
+# database, and an install that never asks pays only the image size.
+#
+# Version-pinned like everything else here, so a rebuilt image is the same image;
+# apt verifies the package's signature against the repository's key.
+ARG PGVECTOR_VERSION=0.8.6-1.pgdg12+2
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends "postgresql-${PG_MAJOR}-pgvector=${PGVECTOR_VERSION}"; \
+    rm -rf /var/lib/apt/lists/*; \
+    ls /usr/share/postgresql/"${PG_MAJOR}"/extension/vector.control
 
 # Disposable point-in-time restore entrypoint (used by scripts/pitr_restore.sh).
 COPY restore-entrypoint.sh /usr/local/bin/restore-entrypoint.sh
