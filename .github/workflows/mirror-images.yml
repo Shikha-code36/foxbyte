@@ -136,6 +136,11 @@ jobs:
           mc_digest="$(push_one "$src_mc" "$MC")"
           echo "minio_digest=$minio_digest" >> "$GITHUB_OUTPUT"
           echo "mc_digest=$mc_digest" >> "$GITHUB_OUTPUT"
+          # Also to the log. The step summary is the readable version, but it cannot
+          # be read back with `gh run view`, so the one thing this workflow exists to
+          # produce was only available by opening the page.
+          echo "pushed $MINIO@$minio_digest"
+          echo "pushed $MC@$mc_digest"
           {
             echo "### Mirrored"
             echo
