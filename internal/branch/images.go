@@ -28,12 +28,14 @@ const (
 	MinioTag = "ghcr.io/thefoxbyte/minio:RELEASE.2025-09-07T16-13-09Z"
 	MCTag    = "ghcr.io/thefoxbyte/mc:RELEASE.2025-08-13T08-35-41Z"
 
-	// MinioDigest and MCDigest pin the exact bytes. Empty between mirroring a new
-	// version and pinning what the mirror printed; .github/workflows/release.yml
-	// refuses to publish while they are, so a release cannot go out pinned by tag
-	// alone — a tag in our own registry can still be moved.
-	MinioDigest = "sha256:52dfd5c0bbd38d3219f2058c7af216d9f9a27a994b7b5baad09bbd38866015ff"
-	MCDigest    = "sha256:bdfae21c72b19fae5a005c56dddba25a873d75fac3dda60f55aea7e417382cbe"
+	// MinioDigest and MCDigest pin the exact bytes: the digest of the index, so one
+	// pin covers both architectures and docker resolves the right one. Empty between
+	// mirroring a new version and pinning what the mirror printed;
+	// .github/workflows/release.yml refuses to publish while they are — and refuses
+	// a pin that is not a multi-architecture index, because a mirror made only from
+	// the amd64 distro image dies on Apple Silicon with "exec format error".
+	MinioDigest = "sha256:3b8964634e9d00dc432b966244c1220660de2fab3643226313467a3ad62ad756"
+	MCDigest    = "sha256:2aacf2bdf60f24b6a8bd1bd859034ff56d014ecd7bf621a5d1b311772f5d6687"
 
 	// PGMajor is the PostgreSQL major a fresh install runs.
 	PGMajor = "18"
