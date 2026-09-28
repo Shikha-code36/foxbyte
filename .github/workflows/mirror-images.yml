@@ -112,7 +112,7 @@ jobs:
           set -euo pipefail
           echo "$GH_TOKEN" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
           push_one() { # <source ref from the distro> <destination ref> -> the digest
-            local src="$1" dest="$2"
+            local src="$1" dest="$2" digest
             docker image inspect "$src" >/dev/null || {
               echo "::error::$src is not in the distro image from ${{ inputs.tag }}"; exit 1; }
             # The version the engine asks for has to be the one being mirrored, or a
@@ -120,8 +120,17 @@ jobs:
             [ "${src##*:}" = "${dest##*:}" ] || {
               echo "::error::the distro carries ${src##*:} but the engine asks for ${dest##*:} — mirror the release that matches, or update internal/branch/images.go"; exit 1; }
             docker tag "$src" "$dest"
-            docker push -q "$dest"
-            docker buildx imagetools inspect "$dest" --format '{{.Manifest.Digest}}'
+            # Everything this function prints is taken as the digest, so the push's
+            # own output goes to the log, not into the value: `docker push -q` still
+            # prints a line, and the two together made a two-line "digest" that the
+            # runner refused to store as a step output.
+            docker push -q "$dest" >&2
+            digest="$(docker buildx imagetools inspect "$dest" --format '{{.Manifest.Digest}}' | tail -n1 | tr -d '[:space:]')"
+            case "$digest" in
+              sha256:????????????????????????????????????????????????????????????????) ;;
+              *) echo "::error::pushing $dest gave \"$digest\" as its digest, which is not one" >&2; exit 1 ;;
+            esac
+            printf '%s' "$digest"
           }
           minio_digest="$(push_one "$src_minio" "$MINIO")"
           mc_digest="$(push_one "$src_mc" "$MC")"
