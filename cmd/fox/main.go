@@ -9,6 +9,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/thefoxbyte/foxbyte/internal/brand"
 	"net"
@@ -84,6 +85,8 @@ Durability / time-travel:
   backup create        Base backup of 'main' -> object storage
   backup list          List base backups in object storage
   backup prune [--keep N]  Delete all but the newest N full backups (the schedule keeps FOX_BACKUP_RETAIN, 7)
+  backup verify        Prove a restore works: probe row -> WAL archive -> restore -> read it back
+                       (the control plane also does this on a schedule, FOX_RESTORE_CHECK_INTERVAL)
   backup target        Where backups go; set s3://bucket[/prefix] --endpoint <url> --access-key <key> [--region r] [--path-style] [--allow-http]; local
   restore --to <ts>    PITR into a disposable container on port 5433 (ts or 'latest')
   backup export [--out <file>] [--branch <name>]...
@@ -292,7 +295,7 @@ func main() {
 		demoCmd(os.Args[2:])
 	case "backup":
 		if len(os.Args) < 3 {
-			fmt.Println("usage: fox backup <create|list|prune|target|export|restore>")
+			fmt.Println("usage: fox backup <create|list|prune|verify|target|export|restore>")
 			os.Exit(2)
 		}
 		switch os.Args[2] {
@@ -310,6 +313,17 @@ func main() {
 				keep = n
 			}
 			must(branch.Prune(keep))
+		case "verify":
+			// Proof rather than argument: write a row, wait for its WAL segment to
+			// be archived, restore the newest base backup into a container of its
+			// own, and look for the row.
+			fmt.Println("Proving a restore works. This restores a full copy of main, so it takes a while.")
+			c, err := branch.VerifyRestore(func(f string, a ...any) { fmt.Printf(f, a...) })
+			if err != nil {
+				must(fmt.Errorf("the backups did not restore: %w", err))
+			}
+			fmt.Printf("\nOK — restored from %s in %ds, and the probe row was there (%d user table(s)).\nBackups read from %s.\n",
+				c.BaseBackup, c.Seconds, c.Tables, c.Target)
 		case "target":
 			backupTargetCmd(os.Args[3:])
 		case "export":
@@ -1068,7 +1082,14 @@ func apikeyCmd(args []string) {
 			fmt.Println("usage: fox apikey revoke <email> <id>")
 			os.Exit(2)
 		}
-		must(s.RevokeKey(u.ID, args[2]))
+		// An id that is not there says so: `fox apikey list <email>` shows the
+		// real ones. Printing "revoked" for a typo left the key working.
+		if err := s.RevokeKey(u.ID, args[2]); err != nil {
+			if errors.Is(err, auth.ErrNoSuchKey) {
+				must(fmt.Errorf("%s has no API key %q — list them with `%s apikey list %s`", u.Email, args[2], brand.CLI, u.Email))
+			}
+			must(err)
+		}
 		s.Audit(auth.EvKeyRevoked, cliActor(), "key "+args[2]+" of "+u.Email, "", "fox apikey revoke")
 		fmt.Println("revoked")
 	default:

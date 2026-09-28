@@ -593,6 +593,71 @@ $S start >/dev/null 2>&1; sleep 3
 assert_eq "…and it passes again once the stack is back" "$($S check >/dev/null 2>&1; echo $?)" "0"
 $S branch delete demoseed >/dev/null 2>&1
 
+echo "### 11e. the claims are checkable (onboarding batch 3)"
+# A backup nothing has restored is a hope. This runs the real check: a probe row,
+# its WAL segment archived, the newest base backup restored into a container of
+# its own, and the row read back.
+#
+# A base backup first, deliberately. §11c moved the backup target to a second
+# object store and back, and backups stay where they were written — so the local
+# archive has a gap across that period, and a replay from a base backup older than
+# the gap stops before the newest writes. That is documented behaviour, not a
+# fault, and taking a backup on the target in force is what a person does after
+# moving one.
+$S backup create >/dev/null 2>&1
+VERIFY="$($S backup verify 2>&1)"; VERIFY_RC=$?
+assert_eq "fox backup verify proves a restore works" "$VERIFY_RC" "0"
+[ "$VERIFY_RC" = 0 ] || { echo "--- what it said ---"; tail -12 <<<"$VERIFY"; echo "--- end ---"; }
+assert_eq "…and says what it restored from" "$(grep -c 'the probe row was there' <<<"$VERIFY")" "1"
+assert_eq "…it leaves no container of its own behind" \
+  "$(sudo docker ps -a --format '{{.Names}}' | grep -cx 'pg-restore-check')" "0"
+assert_eq "…and does not disturb a person's own fox restore container" \
+  "$(sudo docker ps -a --format '{{.Names}}' | grep -cx 'pg-restore')" "0"
+# The result is on disk for fox check and fox status to read.
+assert_eq "the result is recorded" \
+  "$(python3 -c "import json;d=json.load(open('$HOME/$BRAND_STATE_DIR/restore-check.json'));print(d['ok'], d['tables']>0, len(d['token'])>0)")" "True True True"
+assert_eq "fox check reports that a restore has been proven" \
+  "$($S check 2>&1 | grep -c 'restore proven .*yes')" "1"
+# The probe table lives in the Blackbox's own schema, which its triggers skip, so
+# proving a restore must not add anything to the record of schema changes.
+assert_eq "…and it records nothing in the Blackbox" \
+  "$($S blackbox main --limit 200 2>/dev/null | grep -c 'restore_probe')" "0"
+
+# Long-lived containers must come back on their own; transient ones must not.
+for c in pg-main objstore; do
+  assert_eq "$c restarts on crash" \
+    "$(sudo docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$c" 2>/dev/null)" "unless-stopped"
+done
+$S branch create rsttest >/dev/null 2>&1
+assert_eq "a branch does too" \
+  "$(sudo docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' pg-rsttest 2>/dev/null)" "unless-stopped"
+# Crashed, it comes back by itself — the point of the policy. The process inside
+# is killed, not the container: `docker kill` counts as a stop by the user, which
+# "unless-stopped" deliberately honours.
+sudo docker exec pg-rsttest bash -c 'kill -9 1' >/dev/null 2>&1
+for _ in $(seq 20); do [ "$(sudo docker inspect -f '{{.State.Running}}' pg-rsttest 2>/dev/null)" = "true" ] && break; sleep 1; done
+assert_eq "…and a killed branch comes back without anyone running fox" \
+  "$(sudo docker inspect -f '{{.State.Running}}' pg-rsttest 2>/dev/null)" "true"
+# Suspending is stopping on purpose: docker must leave it alone.
+$S branch suspend rsttest >/dev/null 2>&1; sleep 3
+assert_eq "…but a suspended branch stays suspended" \
+  "$(sudo docker inspect -f '{{.State.Running}}' pg-rsttest 2>/dev/null)" "false"
+$S branch delete rsttest >/dev/null 2>&1
+
+# Every command the engine runs has a deadline now: with a tiny one, the failure
+# says so instead of hanging for ever.
+OUT="$(FOX_EXEC_TIMEOUT=1ms $S status 2>&1)"
+assert_eq "a command that outlives its deadline says so" \
+  "$(grep -c 'did not finish within' <<<"$OUT" | awk '{print ($1>0)}')" "1"
+assert_eq "…and FOX_EXEC_TIMEOUT=off restores the old behaviour" \
+  "$(FOX_EXEC_TIMEOUT=off $S status >/dev/null 2>&1; echo $?)" "0"
+
+# Revoking a key that is not there is refused, rather than reported as revoked.
+assert_eq "revoking an unknown API key id is refused" \
+  "$($S apikey revoke test@foxbyte.dev no-such-key 2>&1 | grep -c 'has no API key')" "1"
+assert_eq "…and over the API it is a 404" \
+  "$(curl -sk -o /dev/null -w '%{http_code}' -X DELETE -H "$AUTH" https://localhost:8080/api/keys/no-such-key)" "404"
+
 echo "### 12. fox uninstall (B1)"
 # Removal used to be a list of commands to run by hand. This runs last: it takes
 # the stack apart, so nothing after it has a stack to use.

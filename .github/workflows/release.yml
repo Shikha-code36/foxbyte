@@ -14,12 +14,82 @@ on:
       tag:
         description: 'Existing tag to build and attach to (e.g. v0.1.0)'
         required: true
+      allow_red_nightly:
+        description: 'Release even though the nightly suites are red or stale (say why in the release notes)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
+  # A tag must not ship past a red suite (audit v2 G24, the half the nightly was
+  # built for). The integration suites are the only tests of branching, wake on
+  # connect, point-in-time restore, HA failover and the Blackbox's triggers, and
+  # they run nightly rather than per push because they need a disposable machine.
+  # Until now nothing connected the two: a tag built and published whatever the
+  # nightly had found.
+  #
+  # A tag push is always gated. A manual run can set allow_red_nightly, which is
+  # printed loudly in the log — there is no way to set it from a tag.
+  nightly-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0   # the ancestry check below needs history
+          ref: ${{ inputs.tag || github.ref }}
+      - name: The newest nightly must be green, and recent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALLOW_RED: ${{ inputs.allow_red_nightly }}
+          MAX_AGE_HOURS: '48'
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/nightly.yml/runs?status=completed&per_page=1" \
+            --jq '.workflow_runs[0] // empty')"
+          if [ -z "$run_json" ]; then
+            echo "::error::no completed nightly run to check. Run the nightly workflow (Actions -> nightly -> Run workflow), then tag."
+            [ "$ALLOW_RED" = "true" ] || exit 1
+          fi
+          conclusion="$(jq -r '.conclusion // "none"' <<<"${run_json:-\{\}}")"
+          created="$(jq -r '.created_at // ""' <<<"${run_json:-\{\}}")"
+          url="$(jq -r '.html_url // ""' <<<"${run_json:-\{\}}")"
+          sha="$(jq -r '.head_sha // ""' <<<"${run_json:-\{\}}")"
+          echo "newest nightly: $conclusion at $created"
+          echo "  $url"
+          age_hours=999
+          if [ -n "$created" ]; then
+            age_hours=$(( ( $(date -u +%s) - $(date -u -d "$created" +%s) ) / 3600 ))
+            echo "  that run is ${age_hours}h old"
+          fi
+          fail=0
+          [ "$conclusion" = "success" ] || { echo "::error::the newest nightly concluded '$conclusion'. Fix it, or re-run it, before tagging a release."; fail=1; }
+          [ "$age_hours" -le "$MAX_AGE_HOURS" ] || { echo "::error::the newest nightly is ${age_hours}h old (limit ${MAX_AGE_HOURS}h), so it says little about this tag. Re-run it."; fail=1; }
+          # Whether the code being released is actually what the nightly ran. Not a
+          # failure: a release cut soon after a merge is legitimately ahead of last
+          # night's run, and saying so is more useful than blocking it.
+          if [ -n "$sha" ] && git cat-file -e "$sha^{commit}" 2>/dev/null; then
+            if git merge-base --is-ancestor "$(git rev-parse HEAD)" "$sha"; then
+              echo "this tag's commit is covered by that nightly run."
+            else
+              echo "::warning::this tag has commits the newest nightly never ran ($(git rev-parse --short HEAD) is not an ancestor of ${sha:0:7})."
+            fi
+          fi
+          if [ "$fail" = 1 ]; then
+            if [ "$ALLOW_RED" = "true" ]; then
+              echo "::warning::releasing past the nightly gate because allow_red_nightly was set."
+            else
+              exit 1
+            fi
+          fi
+
   release:
+    needs: nightly-gate
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -147,7 +217,10 @@ jobs:
   # SupportedPGMajors; a test keeps this matrix in step with it). An install keeps
   # running the major its data was created with, so the older one must stay
   # pullable after a fresh install moves on.
+  # Gated too: the image is part of what a release hands people, and a red suite
+  # is as good a reason not to publish it as not to publish the binaries.
   image:
+    needs: nightly-gate
     runs-on: ubuntu-latest
     strategy:
       matrix:

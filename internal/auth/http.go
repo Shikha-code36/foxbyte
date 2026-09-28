@@ -243,8 +243,21 @@ func (s *Store) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 
 func (s *Store) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 	u, _ := UserFrom(r.Context())
-	_ = s.revokeAPIKey(u.ID, r.PathValue("id"))
-	s.Audit(EvKeyRevoked, u.Email, "key "+r.PathValue("id"), clientIP(r), "")
+	id := r.PathValue("id")
+	// A key that was not there is a 404, not a cheerful "revoked": someone
+	// revoking a key needs to know whether the door is actually shut. A key
+	// belonging to another account is the same answer, so this says nothing about
+	// whose keys exist.
+	if err := s.revokeAPIKey(u.ID, id); err != nil {
+		if errors.Is(err, ErrNoSuchKey) {
+			s.Audit(EvKeyRevoked, u.Email, "key "+id, clientIP(r), "refused: no such key for this account")
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such API key"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.Audit(EvKeyRevoked, u.Email, "key "+id, clientIP(r), "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 

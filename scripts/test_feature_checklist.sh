@@ -32,6 +32,17 @@ mismatch="$(grep -o 'data-st="[a-z]*"><td class="c"><i class="ck [a-z]*">' "$che
 	| sed 's/data-st="\([a-z]*\)"><td class="c"><i class="ck \([a-z]*\)">/\1 \2/' | awk '$1 != $2' | sort -u)"
 [ -z "$mismatch" ] || { echo "FAIL: status and badge disagree in FOX_Checklist: $mismatch"; FAIL=1; }
 
+# The badge rule (audit v2 G31): a row badged done or manual must carry nothing
+# unfinished. A limit is marked "lim" and does not count against it; how well
+# something was tested belongs in the "Tested by" column. Without this check the
+# summary and the sub-items drift apart again, which is what the audit found.
+inflated="$(python3 "$(dirname "$0")/lib/checklist_badges.py" "$checklist")"
+[ -z "$inflated" ] || { echo "FAIL: badged done/manual while carrying an open sub-item: $inflated"; FAIL=1; }
+
+# The marks a sub-item may carry, so a typo'd class is not silently invisible.
+bad_li="$(grep -o '<li class="[a-z]*"' "$checklist" | grep -v 'class="\(ok\|part\|todo\|bad\|lim\|next\)"' | sort -u)"
+[ -z "$bad_li" ] || { echo "FAIL: unknown sub-item class in FOX_Checklist: $bad_li"; FAIL=1; }
+
 if [ "$FAIL" = 0 ]; then
 	echo "feature checklist: $(wc -l < "$tmp/checklist" | tr -d ' ') features in step with FOX_Feature_Implemented"
 fi

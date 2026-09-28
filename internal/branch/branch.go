@@ -12,6 +12,7 @@
 package branch
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/thefoxbyte/foxbyte/internal/brand"
@@ -88,34 +89,128 @@ func snapFor(parent, name string) string {
 	return dataset(parent) + "@for-" + name
 }
 
+// restartPolicy keeps a long-lived container running: Docker starts it again if
+// its process dies, and after the machine or the engine VM reboots. Nothing was
+// supervised before, so a Postgres that crashed stayed down until someone noticed
+// and ran `fox start` (audit v2 G27, the half that matters on one machine).
+//
+// "unless-stopped", not "always": a container stopped on purpose — `fox stop`, or
+// suspending a branch — must stay stopped. The restore and branch-before
+// containers deliberately do not carry it; they do one job and are thrown away,
+// and bringing them back after a reboot would resurrect a database nobody asked
+// for.
+var restartPolicy = []string{"--restart", "unless-stopped"}
+
+// Nothing the engine shells out to used to have a deadline (audit v2 G30). A
+// docker daemon that stopped answering, an object store that accepted a
+// connection and then went quiet, a psql waiting on a lock — any of them left
+// `fox` sitting there for ever, with no output and nothing to read. Every
+// command now runs under a context, so it is stopped and the failure says which
+// command it was and how long it waited.
+//
+// Two tiers, because one deadline cannot fit both: a base backup of a large
+// database legitimately runs for a long time, while `docker inspect` answering
+// slowly means something is wrong. The numbers are deliberately generous — the
+// point is to bound a hang, not to cut work short — and FOX_EXEC_TIMEOUT tunes
+// them, with "off" restoring the old unbounded behaviour.
+const (
+	// execLong covers whatever streams its progress: base backups, imports,
+	// restores, image builds and pulls.
+	execLong = 60 * time.Minute
+	// execQuick covers answering a question: inspect, ps, zfs list, a psql -tAc,
+	// a backup listing, a small object copy.
+	execQuick = 10 * time.Minute
+	// execClean covers best-effort cleanup, which is never long.
+	execClean = 2 * time.Minute
+)
+
+// EnvExecTimeout tunes the long deadline (a duration such as "30m"), or switches
+// every deadline off with "off".
+const EnvExecTimeout = "EXEC_TIMEOUT"
+
+// execTimeout is d, adjusted by FOX_EXEC_TIMEOUT. A shorter setting applies to
+// every tier, so one number can tighten the lot; a longer one only raises the
+// long tier, since nothing quick becomes slow legitimately.
+func execTimeout(d time.Duration) time.Duration {
+	v := strings.ToLower(strings.TrimSpace(brand.Getenv(EnvExecTimeout)))
+	switch v {
+	case "":
+		return d
+	case "off", "0", "false", "no":
+		return 0
+	}
+	set, err := time.ParseDuration(v)
+	if err != nil || set <= 0 {
+		return d
+	}
+	if d == execLong || set < d {
+		return set
+	}
+	return d
+}
+
+// sudoCmd prepares a privileged command bounded by d. The returned context is
+// nil when deadlines are switched off.
+func sudoCmd(d time.Duration, name string, args ...string) (*exec.Cmd, context.Context, context.CancelFunc) {
+	full := append([]string{name}, args...)
+	t := execTimeout(d)
+	if t <= 0 {
+		return exec.Command("sudo", full...), nil, func() {}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), t)
+	cmd := exec.CommandContext(ctx, "sudo", full...)
+	// Without this, a killed child that leaves a pipe open keeps Wait blocked —
+	// the hang this is meant to end, one level down.
+	cmd.WaitDelay = 10 * time.Second
+	return cmd, ctx, cancel
+}
+
+// execErr turns a deadline into a sentence naming the command and the wait.
+func execErr(ctx context.Context, d time.Duration, name string, err error) error {
+	if err == nil || ctx == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return err
+	}
+	return fmt.Errorf("%s did not finish within %s and was stopped (set %s to change that, or %s=off)",
+		name, execTimeout(d), brand.EnvName(EnvExecTimeout), brand.EnvName(EnvExecTimeout))
+}
+
 // run executes a privileged command and streams output to the terminal.
 func run(name string, args ...string) error {
-	cmd := exec.Command("sudo", append([]string{name}, args...)...)
+	cmd, ctx, cancel := sudoCmd(execLong, name, args...)
+	defer cancel()
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return execErr(ctx, execLong, name, cmd.Run())
 }
 
 // quiet executes a privileged command, discarding output and errors. Used for
 // best-effort cleanup where "not found" is not a failure.
 func quiet(name string, args ...string) {
-	_ = exec.Command("sudo", append([]string{name}, args...)...).Run()
+	cmd, _, cancel := sudoCmd(execClean, name, args...)
+	defer cancel()
+	_ = cmd.Run()
 }
 
-// capture runs a privileged command and returns its trimmed stdout.
 // execSudo prepares a privileged command for a caller that wires its own input
-// or output.
+// or output. Deliberately without a deadline: its callers are an interactive psql
+// shell, which should last as long as the person wants, and the piped halves of
+// an import or export, whose length is the size of the data.
 func execSudo(name string, args ...string) *exec.Cmd {
 	return exec.Command("sudo", append([]string{name}, args...)...)
 }
 
+// capture runs a privileged command and returns its trimmed stdout.
 func capture(name string, args ...string) (string, error) {
-	out, err := exec.Command("sudo", append([]string{name}, args...)...).Output()
-	return strings.TrimSpace(string(out)), err
+	cmd, ctx, cancel := sudoCmd(execQuick, name, args...)
+	defer cancel()
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), execErr(ctx, execQuick, name, err)
 }
 
 func datasetExists(ds string) bool {
-	return exec.Command("sudo", "zfs", "list", "-H", "-o", "name", ds).Run() == nil
+	cmd, _, cancel := sudoCmd(execQuick, "zfs", "list", "-H", "-o", "name", ds)
+	defer cancel()
+	return cmd.Run() == nil
 }
 
 // ensureNetwork creates the shared docker network (idempotent) so Postgres
@@ -147,6 +242,7 @@ func startContainer(name string, primary bool) error {
 		"-e", "PGDATA=/var/lib/postgresql/data/pgdata",
 		"-v", mountpoint(name) + ":/var/lib/postgresql/data",
 	}
+	args = append(args, restartPolicy...)
 	// Branch Postgres is reached by the in-guest gateway over the docker network
 	// (BackendAddr -> containerIP), so no host port is published by default. That
 	// keeps branch databases unreachable from outside the VM, where a direct
@@ -448,8 +544,10 @@ func LedgerVerify(name string) (string, error) {
 // captureCombined runs a privileged command and returns its combined
 // stdout+stderr, so a failing psql includes the server's error text.
 func captureCombined(name string, args ...string) (string, error) {
-	out, err := exec.Command("sudo", append([]string{name}, args...)...).CombinedOutput()
-	return strings.TrimSpace(string(out)), err
+	cmd, ctx, cancel := sudoCmd(execQuick, name, args...)
+	defer cancel()
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), execErr(ctx, execQuick, name, err)
 }
 
 // QueryText runs SQL on a branch and returns psql's rendered output (used by the
@@ -587,10 +685,14 @@ func SQL(name, stmt string) error {
 // Query runs a statement against a branch and returns trimmed stdout (unaligned,
 // tuples-only) for programmatic checks.
 func Query(name, stmt string) (string, error) {
-	out, err := exec.Command("sudo", "docker", "exec",
+	// Bounded like any other question the engine asks: a psql waiting on a lock
+	// used to hold whatever called this open indefinitely.
+	cmd, ctx, cancel := sudoCmd(execQuick, "docker", "exec",
 		"--env-file", pgEnvFile(), container(name),
-		"psql", "-U", pgUser, "-d", pgDatabase, "-tAc", stmt).Output()
-	return strings.TrimSpace(string(out)), err
+		"psql", "-U", pgUser, "-d", pgDatabase, "-tAc", stmt)
+	defer cancel()
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), execErr(ctx, execQuick, "psql", err)
 }
 
 // --- unified VM stack: MinIO + primary + backups + PITR ---
@@ -647,7 +749,7 @@ func Up() error {
 	}
 	if !objStoreRunning() || objStorePublic() {
 		quiet("docker", "rm", "-f", objStore)
-		if err := run("docker", "run", "-d",
+		args := []string{"run", "-d",
 			"--name", objStore, "--network", network,
 			"--label", managedLabel,
 			"--env-file", minioEnvFile(),
@@ -656,9 +758,11 @@ func Up() error {
 			// network; the host port is for the console. Docker's published
 			// ports bypass the host firewall, so an unbound one is public.
 			"-p", loopbackPort("9000", "9000"), "-p", loopbackPort("9001", "9001"),
-			"-v", objStoreVolume+":/data",
-			minioImage(), "server", "/data", "--console-address", ":9001",
-		); err != nil {
+			"-v", objStoreVolume + ":/data",
+		}
+		args = append(args, restartPolicy...)
+		args = append(args, minioImage(), "server", "/data", "--console-address", ":9001")
+		if err := run("docker", args...); err != nil {
 			return err
 		}
 	}
@@ -737,8 +841,14 @@ func BackupList() error {
 
 // Restore performs point-in-time recovery into a disposable container on port
 // 5433. ts is a timestamp within the archived WAL window, or "latest".
-func Restore(ts string) error {
-	name := "restore"
+func Restore(ts string) error { return restorePITRInto("restore", ts, true) }
+
+// restorePITRInto is Restore with the container named and the host port optional,
+// so the periodic restore check (restoreverify.go) can do the same work without
+// taking over the container or the port a person's own `fox restore` uses.
+// (restoreInto in export.go is a different thing: restoring one branch of an
+// export.)
+func restorePITRInto(name, ts string, publish bool) error {
 	backup, err := restoreBackupName(ts)
 	if err != nil {
 		return err
@@ -758,22 +868,30 @@ func Restore(ts string) error {
 		"-e", "PGDATA=/var/lib/postgresql/data/pgdata",
 		"-e", "RECOVERY_TARGET_TIME="+ts,
 		"-e", "BACKUP_NAME="+backup,
-		"-p", loopbackPort("5433", "5432"), // a full copy of main: this machine only
+	)
+	if publish {
+		args = append(args, "-p", loopbackPort("5433", "5432")) // a full copy of main: this machine only
+	}
+	args = append(args,
 		// The script is carried in the binary and run with `bash -c`, as
 		// BranchBeforeEntry does, so installs whose image predates it still get
 		// the chosen base backup instead of the image's LATEST-only entrypoint.
 		"--entrypoint", "bash",
 		pgImage(), "-c", restorePITRScript,
 	)
-	if err := run("docker", args...); err != nil {
-		return err
+	// The container id docker prints is not what a person is waiting to read; it
+	// is kept for a failure, where it is the only clue.
+	if out, err := captureCombined("docker", args...); err != nil {
+		return fmt.Errorf("starting the restore container: %w\n%s", err, strings.TrimSpace(out))
 	}
 	if err := waitRecovered(name); err != nil {
 		return err
 	}
-	fmt.Printf("restored to %q, ready as container %s (port 5433). Query it with:\n"+
-		"  sudo docker exec %s psql -U dbadmin -d appdb -c 'SELECT ...'\n",
-		ts, container(name), container(name))
+	if publish {
+		fmt.Printf("restored to %q, ready as container %s (port 5433). Query it with:\n"+
+			"  sudo docker exec %s psql -U dbadmin -d appdb -c 'SELECT ...'\n",
+			ts, container(name), container(name))
+	}
 	return nil
 }
 
