@@ -19,7 +19,7 @@ import (
 // process being trusted, which left two holes. Nothing tied a session to an
 // account, so its changes were recorded against the shared role rather than
 // anyone in particular; and a stdio server bridged to anything reachable (a
-// socket, a container, a remote runner) handed all sixteen tools to whatever
+// socket, a container, a remote runner) handed every tool to whatever
 // was on the other end. It now requires an API key, the same kind of key the
 // Gateway and the REST API take, and acts as that key's account. A key scoped
 // to one branch (an agent's) reaches only that branch.
@@ -38,6 +38,10 @@ var acl *access.Checker
 
 // me is set once, by authenticate, before any request is served.
 var me identity
+
+// store is the account store this server authenticated against, kept for the
+// tools that write to it (change requests).
+var store *auth.Store
 
 // ErrNoKey is returned when no key was given at all -- told apart from a wrong
 // key so the message can explain how to make one.
@@ -61,10 +65,11 @@ func authenticate(key string) (identity, error) {
 	if key == "" {
 		return identity{}, ErrNoKey
 	}
-	store, err := auth.OpenFromEnv()
+	s, err := auth.OpenFromEnv()
 	if err != nil {
 		return identity{}, fmt.Errorf("opening the account store: %w", err)
 	}
+	store = s
 	u, scope, ok := store.VerifyKey(key)
 	if !ok {
 		return identity{}, errors.New("that API key is not valid (it may have been revoked)")
@@ -90,6 +95,9 @@ func branchArgs(tool string, args []byte) map[string]access.Level {
 		out["agent-"+str("agent_id")] = access.Manage
 	case "blackbox_diff":
 		out[str("a")], out[str("b")] = access.Use, access.Use
+	case "request_changes":
+		// Both branches are read; approving is what needs more, and no tool does it.
+		out[str("branch")], out[str("target")] = access.Use, access.Use
 	default:
 		b := str("branch")
 		if b == "" {

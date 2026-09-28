@@ -998,6 +998,154 @@ assert_eq "MCP blackbox_diff" \
 for b in v2imp-br v2diff-a; do $S branch delete "$b" >/dev/null 2>&1; done
 drop_imp
 
+echo "### 8b. promotion: a branch's changes, reviewed, then applied (H18)"
+# Branching was only half a workflow: you could copy the database, change it and
+# prove what changed, and then there was no way to bring it back. What is applied
+# is the Blackbox's own record of what ran on the source.
+#
+# Object names carry the run's timestamp, like §5b: main's Blackbox is append-only
+# and nothing clears it between runs, so a fixed name counts the last run's rows.
+PT="v2promo_$(date +%s)"
+PB="v2promoblocked_$(date +%s)"
+for b in v2promo v2promo2; do $S branch delete "$b" >/dev/null 2>&1; done
+# Admin on main first, before any call in this section: whether an account may
+# manage a branch is cached for 30s in each server (internal/access adminTTL), so
+# granting it half way through would leave the cached "no" in force and the
+# approval refused for reasons that have nothing to do with promotion.
+$S admin grant "$USER_EMAIL" --branch main >/dev/null 2>&1
+# A second account, which will never be an admin, for the refusal check.
+BOB="v2promo-bob@foxbyte.dev"
+printf 'password123\n' | $S user create "$BOB" >/dev/null 2>&1 || true
+BOBKEY="$($S apikey create "$BOB" promo 2>/dev/null | grep -o 'key_[A-Za-z0-9_-]*')"
+BOBAUTH="Authorization: Bearer $BOBKEY"
+
+$S branch create v2promo >/dev/null 2>&1
+# A branch made from the CLI belongs to nobody, so hand it to the test account —
+# without this the account cannot reach it at all (audit v2 G02), which is the
+# right behaviour and not what this section is about.
+$S branch owner v2promo "$USER_EMAIL" >/dev/null 2>&1
+gw "$KEY" v2promo "CREATE TABLE $PT(id int PRIMARY KEY)" >/dev/null
+gw "$KEY" v2promo "ALTER TABLE $PT ADD COLUMN note text" >/dev/null
+assert_eq "the target does not have the change yet" \
+  "$(pg pg-main "SELECT count(*) FROM information_schema.tables WHERE table_name='$PT'")" "0"
+
+REQ="$(curl -sk -X POST -H "$AUTH" -H 'content-type: application/json' -d '{"target":"main"}' \
+  "$API/api/branches/v2promo/request")"
+RID="$(python3 -c 'import sys,json; print(json.loads(sys.argv[1])["id"])' "$REQ" 2>/dev/null)"
+assert_eq "asking for review records the statements, and applies nothing" \
+  "$(python3 -c 'import sys,json;d=json.loads(sys.argv[1]);print(d["status"], len(d["entries"]), d["source"], d["target"])' "$REQ" 2>/dev/null)" \
+  "open 2 v2promo main"
+assert_eq "…still nothing on the target" \
+  "$(pg pg-main "SELECT count(*) FROM information_schema.tables WHERE table_name='$PT'")" "0"
+assert_eq "…and the statements are the ones that ran, in order" \
+  "$(python3 -c 'import sys,json;d=json.loads(sys.argv[1]);print(d["entries"][0]["command"], d["entries"][1]["command"])' "$REQ" 2>/dev/null)" \
+  "CREATE TABLE ALTER TABLE"
+
+# Deciding what reaches main is not for anyone who happens to be signed in.
+assert_eq "an account that cannot manage main may not approve into it (403)" \
+  "$(curl -sk -o /dev/null -w '%{http_code}' -X POST -H "$BOBAUTH" -H 'content-type: application/json' -d '{}' "$API/api/requests/$RID/approve")" "403"
+assert_eq "…and main is still untouched" \
+  "$(pg pg-main "SELECT count(*) FROM information_schema.tables WHERE table_name='$PT'")" "0"
+
+# Approving applies them, in one transaction, attributed to whoever wrote them.
+APPLIED=""
+for _ in $(seq 20); do
+  APPLIED="$(curl -sk -X POST -H "$AUTH" -H 'content-type: application/json' -d '{"note":"looks right"}' \
+    "$API/api/requests/$RID/approve")"
+  grep -q '"status":"approved"' <<<"$APPLIED" && break
+  sleep 3
+done
+assert_eq "approving applies them" \
+  "$(python3 -c 'import sys,json;d=json.loads(sys.argv[1]);print(d["status"], d["applied"])' "$APPLIED" 2>/dev/null)" \
+  "approved 2"
+assert_eq "…the target has the change now" \
+  "$(pg pg-main "SELECT count(*) FROM information_schema.columns WHERE table_name='$PT' AND column_name='note'")" "1"
+assert_eq "…recorded in the target's Blackbox, attributed to the person who wrote it" \
+  "$(pg pg-main "SELECT count(*) FROM bb.schema_ledger WHERE object_identity='public.$PT' AND actor='$USER_EMAIL'")" "2"
+assert_eq "…with the request id in the entry's session" \
+  "$(pg pg-main "SELECT count(*) FROM bb.schema_ledger WHERE object_identity='public.$PT' AND session='request-$RID'")" "2"
+assert_eq "…and the approver named beside it" \
+  "$(pg pg-main "SELECT count(*) FROM bb.schema_ledger WHERE object_identity='public.$PT' AND tool LIKE '%approve%'")" "2"
+# A decision is made once: a second approval must not apply the statements twice.
+assert_eq "approving twice is refused (409)" \
+  "$(curl -sk -o /dev/null -w '%{http_code}' -X POST -H "$AUTH" -H 'content-type: application/json' -d '{}' "$API/api/requests/$RID/approve")" "409"
+assert_eq "…and the target still has one copy of each change" \
+  "$(pg pg-main "SELECT count(*) FROM bb.schema_ledger WHERE object_identity='public.$PT' AND session='request-$RID'")" "2"
+
+# What a branch has already given the target is not a reason to refuse its next
+# round, and is not offered again.
+assert_eq "a second request finds nothing left to promote (400)" \
+  "$(curl -sk -o /dev/null -w '%{http_code}' -X POST -H "$AUTH" -H 'content-type: application/json' -d '{"target":"main"}' "$API/api/branches/v2promo/request")" "400"
+gw "$KEY" v2promo "ALTER TABLE $PT ADD COLUMN second_round int" >/dev/null
+REQ2="$(curl -sk -X POST -H "$AUTH" -H 'content-type: application/json' -d '{"target":"main"}' "$API/api/branches/v2promo/request")"
+assert_eq "…but a new change on the same branch can be promoted again" \
+  "$(python3 -c 'import sys,json;d=json.loads(sys.argv[1]);print(d["status"], len(d["entries"]), d["entries"][0]["command"])' "$REQ2" 2>/dev/null)" \
+  "open 1 ALTER TABLE"
+RID2="$(python3 -c 'import sys,json; print(json.loads(sys.argv[1])["id"])' "$REQ2" 2>/dev/null)"
+curl -sk -o /dev/null -X POST -H "$AUTH" -H 'content-type: application/json' -d '{}' "$API/api/requests/$RID2/approve"
+assert_eq "…and it lands on the target" \
+  "$(pg pg-main "SELECT count(*) FROM information_schema.columns WHERE table_name='$PT' AND column_name='second_round'")" "1"
+
+# Owned exactly as a change made through the gateway would be. Applied as the
+# superuser it would belong to the admin role, and the next ALTER through the
+# gateway would fail with "must be owner of table" — the change would arrive and
+# then be unworkable.
+assert_eq "…the promoted table is owned like any gateway-made one" \
+  "$(pg pg-main "SELECT tableowner FROM pg_tables WHERE tablename='$PT'")" "$DB_CLIENT_ROLE"
+assert_eq "…so it can be altered through the gateway afterwards" \
+  "$(gw "$KEY" main "ALTER TABLE $PT ADD COLUMN owner_check int" 2>&1 | grep -c 'must be owner')" "0"
+
+# Both sides changing the same object is refused rather than guessed at. The
+# target's change has to come after the branch was made, or there is nothing to
+# disagree about: a branch made afterwards already contains it.
+$S branch create v2promo2 >/dev/null 2>&1
+$S branch owner v2promo2 "$USER_EMAIL" >/dev/null 2>&1
+gw "$KEY" v2promo2 "ALTER TABLE $PT ADD COLUMN price numeric" >/dev/null
+gw "$KEY" main "ALTER TABLE $PT ADD COLUMN qty int" >/dev/null
+CONFLICT="$(curl -sk -w '\n%{http_code}' -X POST -H "$AUTH" -H 'content-type: application/json' -d '{"target":"main"}' "$API/api/branches/v2promo2/request")"
+assert_eq "a conflicting request is refused (409), naming the object" \
+  "$(tail -1 <<<"$CONFLICT")|$(head -1 <<<"$CONFLICT" | grep -c "$PT")" "409|1"
+
+# The target's policy gate is not something a merge walks around. The rule is this
+# section's own, so the check does not depend on what the policy sections left.
+$S branch delete v2promo2 >/dev/null 2>&1
+$S branch create v2promo2 >/dev/null 2>&1
+$S branch owner v2promo2 "$USER_EMAIL" >/dev/null 2>&1
+$S policy add promo-gate --command "CREATE TABLE" --pattern "$PB" --block --reason "not on main" >/dev/null 2>&1
+gw "$KEY" v2promo2 "CREATE TABLE $PB(id int)" >/dev/null
+BLOCKED="$(curl -sk -w '\n%{http_code}' -X POST -H "$AUTH" -H 'content-type: application/json' -d '{"target":"main"}' "$API/api/branches/v2promo2/request")"
+assert_eq "a request the target's gate would block is refused (422), naming the rule" \
+  "$(tail -1 <<<"$BLOCKED")|$(head -1 <<<"$BLOCKED" | grep -c 'promo-gate')" "422|1"
+$S policy remove promo-gate >/dev/null 2>&1
+
+# The CLI is the same thing from a shell.
+$S branch delete v2promo2 >/dev/null 2>&1
+$S branch create v2promo2 >/dev/null 2>&1
+$S branch owner v2promo2 "$USER_EMAIL" >/dev/null 2>&1
+gw "$KEY" v2promo2 "CREATE TABLE ${PT}_cli(id int)" >/dev/null
+CLIREQ="$($S branch request v2promo2 --to main 2>&1)"
+assert_eq "fox branch request shows what would be applied" \
+  "$(grep -c "CREATE TABLE ${PT}_cli" <<<"$CLIREQ")|$(grep -c 'Nothing has been applied' <<<"$CLIREQ")" "1|1"
+CLIID="$(grep -o 'request approve [0-9]*' <<<"$CLIREQ" | grep -o '[0-9]*')"
+assert_eq "fox request list shows it as open" "$($S request list --open | grep -c "#$CLIID")" "1"
+$S request approve "$CLIID" >/dev/null 2>&1
+assert_eq "fox request approve applies it" \
+  "$(pg pg-main "SELECT count(*) FROM information_schema.tables WHERE table_name='${PT}_cli'")" "1"
+assert_eq "…and a decided request cannot be decided again" \
+  "$($S request reject "$CLIID" 2>&1 | grep -c 'already')" "1"
+
+# A deleted branch leaves no open request pointing at nothing.
+gw "$KEY" v2promo2 "CREATE TABLE ${PT}_gone(id int)" >/dev/null
+$S branch request v2promo2 --to main >/dev/null 2>&1
+$S branch delete v2promo2 >/dev/null 2>&1
+assert_eq "deleting a branch forgets its open requests" \
+  "$($S request list --open | grep -c 'v2promo2')" "0"
+
+$S branch delete v2promo >/dev/null 2>&1
+pg pg-main "SET bb.allow_destructive=on; DROP TABLE IF EXISTS $PT, ${PT}_cli, $PB" >/dev/null
+$S admin revoke "$USER_EMAIL" --branch main >/dev/null 2>&1   # back to the non-admin user this suite assumes
+$S user delete "$BOB" >/dev/null 2>&1
+
 echo "### 9. a restart records nothing in the Blackbox (H1)"
 # The Blackbox's install script re-runs on every start. It used to create the
 # event triggers before its own GRANT/REVOKE/ALTER DEFAULT PRIVILEGES block, so
@@ -1005,15 +1153,18 @@ echo "### 9. a restart records nothing in the Blackbox (H1)"
 $S branch create v2restart >/dev/null 2>&1
 M0="$(pg pg-main 'SELECT count(*) FROM bb.schema_ledger')"
 B0="$(pg pg-v2restart 'SELECT count(*) FROM bb.schema_ledger')"
+# The newest id, not the row count: earlier sections delete rows and add them, so
+# a count is not a position in the ledger.
+MID0="$(pg pg-main 'SELECT coalesce(max(id),0) FROM bb.schema_ledger')"
 $S stop >/dev/null 2>&1; $S start >/dev/null 2>&1
 $S branch resume v2restart >/dev/null 2>&1
 assert_eq "a stop and start adds nothing to main's Blackbox" "$(pg pg-main 'SELECT count(*) FROM bb.schema_ledger')" "$M0"
 assert_eq "…nor to a branch's" "$(pg pg-v2restart 'SELECT count(*) FROM bb.schema_ledger')" "$B0"
 assert_eq "…and none of its entries is the install's own GRANT with no actor" \
-  "$(pg pg-main "SELECT count(*) FROM bb.schema_ledger WHERE id > $M0 AND command_tag IN ('GRANT','REVOKE','ALTER DEFAULT PRIVILEGES')")" "0"
+  "$(pg pg-main "SELECT count(*) FROM bb.schema_ledger WHERE id > $MID0 AND command_tag IN ('GRANT','REVOKE','ALTER DEFAULT PRIVILEGES')")" "0"
 gw "$KEY" main "CREATE TABLE v2restart_t (x int)" >/dev/null
 assert_eq "a user's change is still recorded, as that user" \
-  "$(pg pg-main "SELECT count(*) || '|' || max(actor) FROM bb.schema_ledger WHERE id > $M0 AND object_identity = 'public.v2restart_t'")" "1|$USER_EMAIL"
+  "$(pg pg-main "SELECT count(*) || '|' || max(actor) FROM bb.schema_ledger WHERE id > $MID0 AND object_identity = 'public.v2restart_t'")" "1|$USER_EMAIL"
 pg pg-main "SET bb.allow_destructive=on; DROP TABLE v2restart_t" >/dev/null
 $S branch delete v2restart >/dev/null 2>&1
 

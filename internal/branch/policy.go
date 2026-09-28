@@ -239,11 +239,22 @@ func RemovePolicyRule(name, ruleID, actor string) error {
 // PolicyCheck previews the rules a statement would trigger on a branch without
 // running it. It returns the command tag it assumed and the matches, blocks first.
 func PolicyCheck(name, statement string) (string, []ledger.PolicyDetail, error) {
+	return PolicyCheckTag(name, ledger.CommandTag(statement), statement)
+}
+
+// PolicyCheckTag is PolicyCheck for a caller that already knows the command tag —
+// a promotion, where the tag is the one the Blackbox recorded when the statement
+// ran. Deriving it again from the text would read a script's first command
+// instead: a statement recorded as `SET …; DROP TABLE x` is a DROP, and asking the
+// gate about a SET would let it through.
+func PolicyCheckTag(name, tag, statement string) (string, []ledger.PolicyDetail, error) {
 	name, err := ledgerBranchName(name)
 	if err != nil {
 		return "", nil, err
 	}
-	tag := ledger.CommandTag(statement)
+	if tag == "" {
+		tag = ledger.CommandTag(statement)
+	}
 	if tag == "" {
 		return "", nil, fmt.Errorf("%w: sql is required", ErrInvalidRequest)
 	}

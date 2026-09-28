@@ -176,8 +176,14 @@ func (s *Store) BranchOwner(branch string) (int64, bool) {
 	return uid, true
 }
 
-// ForgetBranch drops a branch's owner, when the branch is deleted.
+// ForgetBranch drops what the store held about a branch that has been deleted:
+// its owner, and any change request still waiting on it. One place decides what
+// forgetting a branch means, so every caller — the CLI, the API, the agent API —
+// gets the same thing.
 func (s *Store) ForgetBranch(branch string) error {
-	_, err := s.db.Exec(`DELETE FROM branch_owners WHERE branch=?`, branch)
-	return err
+	if _, err := s.db.Exec(`DELETE FROM branch_owners WHERE branch=?`, branch); err != nil {
+		return err
+	}
+	// Decided requests are history and stay; an open one points at nothing now.
+	return s.ForgetBranchRequests(branch)
 }

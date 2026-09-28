@@ -37,6 +37,12 @@ printf '%s\n' "$PASSWORD" | "$S" user create "$EMAIL" >/dev/null 2>&1
 for b in "$BRANCH" "$NEW_BRANCH"; do "$S" branch delete "$b" >/dev/null 2>&1; done
 "$S" branch create "$BRANCH" >/dev/null 2>&1
 "$S" branch owner "$BRANCH" "$EMAIL" >/dev/null 2>&1
+# main is left alone by these tests, deliberately: a change applied to main would
+# be inherited by every branch made afterwards, and the next run's `CREATE TABLE`
+# would fail as a duplicate. The promotion test makes a target of its own.
+# Any table an earlier version of these tests did leave on main is removed here.
+sudo docker exec -e PGPASSWORD=foxbyte "pg-main" psql -U dbadmin -d appdb -q -c \
+	"SET bb.allow_destructive=on; DROP TABLE IF EXISTS $TABLE" >/dev/null 2>&1
 
 # The console has to be there: a binary built without `-tags embedui` serves
 # the API but no UI, and every test below would fail on a blank page.
@@ -63,7 +69,7 @@ FOX_E2E_URL="$API" FOX_E2E_EMAIL="$EMAIL" FOX_E2E_PASSWORD="$PASSWORD" \
 rc=$?
 
 echo "### cleanup"
-for b in "$BRANCH" "$NEW_BRANCH"; do "$S" branch delete "$b" >/dev/null 2>&1; done
+for b in "$BRANCH" "$NEW_BRANCH" e2eui3; do "$S" branch delete "$b" >/dev/null 2>&1; done
 cd "$ROOT" || exit 1
 # A failure leaves the screenshots and traces where CI can collect them.
 if [ "$rc" = 0 ]; then

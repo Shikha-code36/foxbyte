@@ -112,6 +112,15 @@ Branching:
   branch suspend <name> Stop a branch (data preserved); resumes on next connect
   branch resume <name>  Start a suspended branch
   branch diff <a> <b>   Schema changes made on each branch since they split (from Blackbox; --json)
+  branch request <source> [--to <target>]
+                       Offer this branch's schema changes for review, to apply to another
+                       branch (default 'main'). Nothing is applied until it is approved.
+
+Promotion — review a branch's changes, then apply them (schema only):
+  request list [--open] [--target b]   Change requests, newest first
+  request show <id>                    Its statements, in the order they ran
+  request approve <id> [--note "…"]    Apply them to the target, in one transaction
+  request reject <id> [--note "…"]     Decline; the target is untouched
 
 Blackbox — the database's record of every schema change (RECORD layer; fox ledger … works too):
   blackbox [branch] [--limit N]   Show captured DDL changes — attributed & policy-checked
@@ -351,6 +360,8 @@ func main() {
 			os.Exit(2)
 		}
 		must(branch.Restore(ts))
+	case "request":
+		requestCmd(os.Args[2:])
 	case "branch":
 		branchCmd(os.Args[2:])
 	case "impact":
@@ -580,7 +591,7 @@ func durFlag(args []string, name string, def time.Duration) time.Duration {
 // branchCmd dispatches `fox branch <subcommand>`.
 func branchCmd(args []string) {
 	if len(args) == 0 {
-		fmt.Println("usage: fox branch <create|list|delete|owner|reset|suspend|resume> [name]")
+		fmt.Println("usage: fox branch <create|list|delete|owner|reset|suspend|resume|diff|request> [name]")
 		os.Exit(2)
 	}
 	switch args[0] {
@@ -638,6 +649,8 @@ func branchCmd(args []string) {
 		must(branch.Wake(args[1]))
 	case "diff":
 		diffCmd(args[1:])
+	case "request":
+		branchRequestCmd(args[1:])
 	default:
 		fmt.Printf("unknown branch subcommand: %s\n", args[0])
 		os.Exit(2)

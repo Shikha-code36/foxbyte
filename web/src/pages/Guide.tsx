@@ -207,7 +207,20 @@ fox blackbox branch-before 42 --as before-the-drop`}</Code>
         backup taken before the change. <code>main</code> is the only branch it works from: it is the only one that
         archives WAL. A change the guardrail refused never happened, so there is nothing to go back to.</p>
 
-      <h2>7 · One database per AI agent</h2>
+      <h2>7 · Bring a branch's changes back</h2>
+      <p>A branch is only half a workflow if nothing can come back from it. Offer its schema changes for review,
+        and whoever can manage the target applies them — <strong>schema only, no data is moved</strong>.</p>
+      <Code>{`fox branch request dev --to main   # what dev has that main does not; nothing is applied yet
+fox request show 3                 # the statements, in the order they ran on dev
+fox request approve 3              # applied to main in one transaction`}</Code>
+      <p>What is applied is the Blackbox's record of what actually ran on <code>dev</code>, so <code>main</code>{' '}
+        ends up holding the same statements, each attributed to whoever wrote it and the approver named beside it.
+        The <a href="/requests">Requests</a> page does the same in the console.</p>
+      <p className="muted">Refused if both branches changed the same object since they split, if the target's
+        policy gate would block a statement, or if there is nothing to promote. An agent can ask for a review and
+        cannot approve its own request — approving needs the right to manage the target.</p>
+
+      <h2>8 · One database per AI agent</h2>
       <p>Give each agent its own disposable database over HTTP (these endpoints need an API key —
         create one with <code>fox apikey create &lt;email&gt;</code>):</p>
       <Code>{`curl -H "Authorization: Bearer $FOX_KEY" -X POST   https://localhost:8088/agents/alice/branch
@@ -230,6 +243,7 @@ curl -H "Authorization: Bearer $FOX_KEY" -X DELETE https://localhost:8088/agents
           <tr><td>Create / list / delete a branch</td><td><code>fox branch create|list|delete &lt;name&gt;</code></td></tr>
           <tr><td>Time-travel (PITR)</td><td><code>fox backup create</code> · <code>fox restore --to latest</code></td></tr>
           <tr><td>Undo a schema change</td><td><code>fox blackbox branch-before &lt;id&gt;</code></td></tr>
+          <tr><td>Bring a branch's changes back</td><td><code>fox branch request &lt;source&gt;</code> · <code>fox request approve &lt;id&gt;</code></td></tr>
           <tr><td>Web console &amp; dashboard</td><td><code>fox start</code> → <code>localhost:8080</code></td></tr>
         </tbody>
       </table>

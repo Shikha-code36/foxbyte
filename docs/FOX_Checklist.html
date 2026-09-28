@@ -146,7 +146,8 @@
       <li>Automated tests for the imports (I1–I3, I7) — the last area with none.</li>
       <li>Gate release tags on the nightly suites, so a tag cannot ship past a red suite (M2).</li>
       <li>Decide how this checklist shows partial work (audit v2 G31): 9 features are badged done while carrying an open sub-item (<code>C7, D5, D6, F5, G3, H16, H17, I13, M7</code>) — down from 34. Each of those sub-items is a disclosed limit rather than unfinished work, so the remaining question is whether a limit belongs in the sub-item list at all.</li>
-      <li><b>From the audit, deliberately left:</b> HA beyond the demo — automatic failover and fencing across hosts (D4, G21); metrics, alerts and restart on crash (B2, G27); branch merge (H18, G29); timeouts on the engine's own commands and splitting the branch package (G30); quotas on btrfs and per-branch CPU/memory (C6, G33); pgvector in the image (M6, G34); <code>/api/v1</code> (K1, G35).</li>
+      <li><b>Promotion is built</b> (H18, audit G29): a branch's recorded statements, reviewed, then applied to another branch in one transaction — attributed to whoever wrote them, with the approver beside them. Schema only. An agent can propose and cannot approve its own request.</li>
+      <li><b>From the audit, deliberately left:</b> HA beyond the demo — automatic failover and fencing across hosts (D4, G21); metrics and alerts, and supervision of the background servers themselves (B2, G27 — the containers restart); splitting the branch package and running its SQL through pgx (G30 — the deadlines are in); quotas on btrfs and per-branch CPU/memory (C6, G33); pgvector in the image (M6, G34); <code>/api/v1</code> (K1, G35).</li>
     </ol>
   <div class="foot">FOX_Checklist · overview</div>
 </section>
@@ -406,9 +407,13 @@
       <li class="ok">Dependents (views, foreign keys, indexes, depth)</li><li class="ok">Other branches that have the object</li>
       <li class="ok">Policy verdict and risk score</li><li class="ok">CLI, REST, MCP, inside execute_change</li>
       <li class="part">Functions, types, schemas not recognised from SQL</li></ul></td><td class="tb">Unit; v2 §8</td></tr>
-    <tr data-id="H18" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H18</td><td><b>Blackbox diff between branches</b><ul class="subs">
+    <tr data-id="H18" data-st="done"><td class="c"><i class="ck done"></i></td><td class="id">H18</td><td><b>Blackbox diff, and promoting a branch's changes</b><ul class="subs">
       <li class="ok">Fork point, changes only on each side</li><li class="ok">Objects changed on both</li>
-      <li class="ok">CLI, REST, MCP</li><li class="next">Merge (diff only today)</li></ul></td><td class="tb">Unit; v2 §8</td></tr>
+      <li class="ok">Diff: CLI, REST, MCP</li>
+      <li class="ok">Promotion: a branch's recorded statements, reviewed, then applied to another branch in one transaction</li>
+      <li class="ok">Refused on a conflict (both sides changed the same object), on a statement the target's gate blocks, and when there is nothing to promote</li>
+      <li class="ok">Approving needs the right to manage the target, so an agent cannot approve its own request</li>
+      <li class="ok">Promotion: CLI, REST, MCP and the web Requests page</li></ul></td><td class="tb">Unit; v2 §8, §8b</td></tr>
   </table>
 </section>
 
@@ -576,8 +581,6 @@
   <table>
     <tr><th></th><th>ID</th><th>Item · scope</th><th>Related</th></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Multi-tenant projects</b><ul class="subs"><li class="todo">Projects / organisations, and roles within them</li><li class="ok">Per-branch permissions: owner or admin, on every branch-scoped route (G2 of the audit)</li></ul></td><td class="tb">G1, H6</td></tr>
-    <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Branch merge</b><ul class="subs"><li class="todo">Apply one branch's schema changes to another</li></ul></td><td class="tb">H18</td></tr>
-    
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Automatic HA failover</b><ul class="subs"><li class="todo">Health detection, fencing</li><li class="todo">Multi-host</li></ul></td><td class="tb">D4</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>Pipelines: scheduling, incremental / CDC extract, DAG view</b></td><td class="tb">J1</td></tr>
     <tr data-st="todo"><td class="c"><i class="ck todo"></i></td><td class="id">—</td><td><b>More import sources: Cassandra, DynamoDB</b></td><td class="tb">I1–I8</td></tr>
