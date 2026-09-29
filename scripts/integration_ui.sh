@@ -65,6 +65,10 @@ npx --yes playwright install --with-deps chromium >/dev/null 2>&1 || {
 
 echo "### the console's smoke tests"
 FOX_E2E_URL="$API" FOX_E2E_EMAIL="$EMAIL" FOX_E2E_PASSWORD="$PASSWORD" \
+	# A retry in the log is expected in CI and is not the console misbehaving: the
+	# engine's short-lived containers change the host's network interfaces, and
+	# Chromium aborts requests in flight when they do. web/playwright.config.ts
+	# has the detail. A test that fails twice running is a real failure.
 	FOX_E2E_BRANCH="$BRANCH" FOX_E2E_NEW_BRANCH="$NEW_BRANCH" FOX_E2E_TABLE="$TABLE" npx playwright test
 rc=$?
 
