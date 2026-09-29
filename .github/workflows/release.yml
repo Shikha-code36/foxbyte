@@ -122,6 +122,42 @@ jobs:
           done
           exit "$missing"
 
+      # And that what is pinned runs on both architectures. The mirror takes the
+      # images out of the Windows distro image, which is built on an amd64 runner,
+      # and a save/load/push keeps one platform — so a mirrored image is amd64 only
+      # unless it was deliberately combined (scripts/mirror-images-local.sh). Pushed
+      # single-arch it works everywhere except Apple Silicon, where the engine dies
+      # with "exec format error" on the first start.
+      - name: The object-store images must run on amd64 and arm64
+        run: |
+          set -euo pipefail
+          fail=0
+          for c in Minio MC; do
+            tag="$(sed -n "s/^[[:space:]]*${c}Tag[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" internal/branch/images.go | head -1)"
+            digest="$(sed -n "s/^[[:space:]]*${c}Digest[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" internal/branch/images.go | head -1)"
+            repo="${tag%%:*}"; repo="${repo#ghcr.io/}"
+            token="$(curl -fsS "https://ghcr.io/token?scope=repository:${repo}:pull&service=ghcr.io" | jq -r .token)"
+            platforms="$(curl -fsS -H "Authorization: Bearer $token" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/${repo}/manifests/${digest}" \
+              | jq -r '[(.manifests // [])[] | .platform.os + "/" + .platform.architecture] | join(" ")')"
+            if [ -z "$platforms" ]; then
+              # No manifest list at all: one platform, whichever it was built on.
+              echo "$tag@$digest: a single-platform image"
+              echo "::error::$tag is not a multi-architecture image, so it runs on one architecture only — rebuild the mirror with scripts/mirror-images-local.sh"
+              fail=1
+              continue
+            fi
+            echo "$tag@$digest: $platforms"
+            for want in linux/amd64 linux/arm64; do
+              case " $platforms " in
+                *" $want "*) ;;
+                *) echo "::error::$tag has no $want build — rebuild the mirror with scripts/mirror-images-local.sh"; fail=1 ;;
+              esac
+            done
+          done
+          exit "$fail"
+
       - name: Build release artifacts
         run: make release VERSION="${TAG#v}"
         env:
