@@ -387,20 +387,25 @@ func (s *Store) userByID(id int64) (User, error) {
 
 const sessionTTL = 30 * 24 * time.Hour
 
+// The sessions table stores hashKey(token), not the token itself — same
+// reasoning as api_keys.key_hash: a leaked store (backup, replication
+// snapshot, misconfigured volume) then yields nothing a reader can act on,
+// only a hash no easier to use than a random guess.
 func (s *Store) createSession(userID int64) (string, error) {
 	tok := randToken(24)
 	_, err := s.db.Exec(`INSERT INTO sessions(token, user_id, expires) VALUES(?,?,?)`,
-		tok, userID, time.Now().Add(sessionTTL).Unix())
+		hashKey(tok), userID, time.Now().Add(sessionTTL).Unix())
 	return tok, err
 }
 
 func (s *Store) userBySession(tok string) (User, bool) {
+	h := hashKey(tok)
 	var uid, exp int64
-	if err := s.db.QueryRow(`SELECT user_id, expires FROM sessions WHERE token=?`, tok).Scan(&uid, &exp); err != nil {
+	if err := s.db.QueryRow(`SELECT user_id, expires FROM sessions WHERE token=?`, h).Scan(&uid, &exp); err != nil {
 		return User{}, false
 	}
 	if time.Now().Unix() > exp {
-		_, _ = s.db.Exec(`DELETE FROM sessions WHERE token=?`, tok)
+		_, _ = s.db.Exec(`DELETE FROM sessions WHERE token=?`, h)
 		return User{}, false
 	}
 	u, err := s.userByID(uid)
@@ -408,7 +413,7 @@ func (s *Store) userBySession(tok string) (User, bool) {
 }
 
 func (s *Store) deleteSession(tok string) {
-	_, _ = s.db.Exec(`DELETE FROM sessions WHERE token=?`, tok)
+	_, _ = s.db.Exec(`DELETE FROM sessions WHERE token=?`, hashKey(tok))
 }
 
 // ---- api keys ----
