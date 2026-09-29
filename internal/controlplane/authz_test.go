@@ -74,8 +74,8 @@ func TestImportHosts(t *testing.T) {
 		"postgresql://u@[::1]:5432/app":                     {"::1"},
 		"mongodb://u:p@h1:27017,h2:27017/app?replicaSet=r":  {"h1", "h2"},
 		"postgres://u@public.example.com/app?host=10.0.0.5": {"public.example.com", "10.0.0.5"},
-		"postgres:///app":                                   {"localhost"},
-		"mysql://u:p%40x@my.example.com/app":                {"my.example.com"},
+		"postgres:///app":                    {"localhost"},
+		"mysql://u:p%40x@my.example.com/app": {"my.example.com"},
 	} {
 		got, err := importHosts(src)
 		sort.Strings(got)

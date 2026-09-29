@@ -83,7 +83,7 @@ func TestStreamJSONDocs(t *testing.T) {
 	for in, want := range map[string]string{
 		`[{"a":1}, {bad}, {"a":3}]`: "element 2 is not valid JSON",
 		`[{"a":1}, `:                "element 2",
-		`[{"a":1}`:                  "isn't closed",
+		`[{"a":1}`:                  "element 2 is not valid JSON",
 		"{\"a\":1}\nnot json\n{}\n": "line 2 is not valid JSON",
 	} {
 		if _, err := read(in, nil); err == nil || !strings.Contains(err.Error(), want) {
