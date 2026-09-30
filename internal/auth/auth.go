@@ -203,6 +203,14 @@ func migrate(ctx context.Context, db *sql.Conn) error {
 			return err
 		}
 	}
+	// Sessions were stored in plaintext before this; those rows no longer match
+	// anything, and leaving them would keep the very secrets hashing is meant to
+	// remove. Hashes are 64 hex characters and the old tokens are 32, so this only
+	// ever removes the legacy ones — which matters because migrate() runs on every
+	// open, and a bare DELETE would sign everyone out on each service start.
+	if _, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE length(token) <> 64`); err != nil {
+		return err
+	}
 	return nil
 }
 
